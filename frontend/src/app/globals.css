@@ -1,0 +1,418 @@
+@import "tailwindcss";
+
+/* Pretendard — 번들 가변 폰트(Windows/Linux/Mac 동일 렌더) */
+@font-face {
+  font-family: "Pretendard Variable";
+  font-weight: 300 600;
+  font-display: swap;
+  src: url("/fonts/PretendardVariable.woff2") format("woff2-variations");
+}
+
+@theme {
+  /* Accent — 단일 바이올렛(Whimsical), 세 역할 + tint */
+  --color-accent: #6a41ff;
+  --color-accent-focus: #5733e0;
+  --color-accent-elevated: #4a29c2;
+  --color-on-accent: #ffffff;
+  --color-accent-tint: #efebff; /* 선택 행/활성 툴 배경 */
+  --color-accent-tint-border: #d7ccff;
+
+  /* Surfaces */
+  --color-surface: #ffffff;
+  --color-surface-alt: #f5f5f7;
+  --color-surface-pearl: #fafafc;
+  --color-surface-chip: #d2d2d7;
+  --color-canvas: #f6f6f8; /* 무한 캔버스 배경 */
+  --color-canvas-dot: #bdbdc9; /* dot-grid 점 — 가시성 위해 진하게 */
+
+  /* Ink */
+  --color-ink: #16161d;
+  --color-ink-secondary: #333333;
+  --color-ink-tertiary: #7a7a7a;
+  --color-ink-muted: #a0a0a8; /* placeholder·divider 라벨·푸터 등 약한 뮤트 텍스트 */
+
+  /* Borders */
+  --color-divider: #f0f0f0;
+  --color-hairline: #e6e6ea;
+  --color-border-strong: #c9c9d1; /* 엣지 기본선 */
+
+  /* Feedback */
+  --color-error: #cc3300;
+  --color-notice: #fdf8ec; /* 안내 스트립(뷰어 읽기전용 등) 연한 옐로우 bg */
+  --color-notice-border: #e2c98f;
+
+  /* Elevation — Whimsical 쿨톤 저확산 (노드 hover / 패널 / 플로팅) */
+  --shadow-sm: 0 1px 2px rgba(22, 22, 29, 0.06);
+  --shadow-md: 0 4px 12px rgba(22, 22, 29, 0.08);
+  --shadow-lg: 0 8px 28px rgba(22, 22, 29, 0.12);
+
+  /* Diff(비교) — 노드 타입 의미색으로도 재사용 */
+  --color-added: #16794f;
+  --color-removed: #cc3300;
+  --color-changed: #9a6b00;
+
+  /* 엣지 방향 강조 — 선택 노드로 들어오는(teal)·나가는(orange) 흐름. 한류/난류 대비로 방향 구분 */
+  --color-edge-in: #0d9488;
+  --color-edge-out: #ea580c;
+  /* 선택된 엣지 강조색 — accent보다 밝은 바이올렛으로 또렷하게 */
+  --color-edge-selected: #7c4dff;
+  /* 판단(decision) 분기 엣지 — 은은한 파스텔 블루(Yes)/레드(No). 무채도 팔레트와 조화, 과강조 회피 */
+  --color-branch-yes: #6f93cc;
+  --color-branch-no: #cf7e84;
+
+  /* Fonts */
+  --font-text: "Pretendard Variable", Pretendard, -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --font-display: "Pretendard Variable", Pretendard, -apple-system, "SF Pro Display", system-ui, sans-serif;
+
+  /* Type scale */
+  --text-tagline: 21px;
+  --text-tagline--line-height: 1.19;
+  --text-tagline--font-weight: 600;
+  --text-body-strong: 17px;
+  --text-body-strong--line-height: 1.24;
+  --text-body-strong--font-weight: 600;
+  --text-body: 17px;
+  --text-body--line-height: 1.47;
+  --text-body--font-weight: 400;
+  --text-caption: 14px;
+  --text-caption--line-height: 1.43;
+  --text-caption--font-weight: 400;
+  --text-caption-strong: 14px;
+  --text-caption-strong--line-height: 1.29;
+  --text-caption-strong--font-weight: 600;
+  --text-fine: 12px;
+  --text-fine--line-height: 1;
+  --text-fine--font-weight: 400;
+
+  /* Radius */
+  --radius-xs: 5px;
+  --radius-sm: 8px;
+  --radius-md: 11px;
+  --radius-lg: 18px;
+
+  /* Easing */
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.25, 1, 0.5, 1);
+
+  /* 마스터-디테일 분기점 — 이하에선 상세를 카드 아래 아코디언으로 접는다(맵·공지·인박스 공통).
+     980px: 목록 min-w 18rem + 상세 min-w 24rem + 여백이 찌그러지지 않는 하한. */
+  --breakpoint-split: 61.25rem;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 스크롤바 기본 숨김 — 스크롤은 동작하되 막대만 비표시(채팅 등 컴팩트 영역). */
+.scrollbar-hidden {
+  scrollbar-width: none; /* Firefox */
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none; /* WebKit */
+}
+
+/* 자동 숨김 스크롤 — 막대를 평소 숨기고 hover/스크롤 시에만 노출(오버레이 느낌).
+   피커 모달의 명단처럼 높이를 고정하고 내부 스크롤할 때 사용 — 항목 추가로 모달이 늘지 않게. */
+.scroll-soft {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent; /* Firefox: 평소 투명 */
+}
+.scroll-soft:hover {
+  scrollbar-color: var(--color-ink-tertiary) transparent;
+}
+.scroll-soft::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-soft::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+.scroll-soft:hover::-webkit-scrollbar-thumb {
+  background: var(--color-ink-tertiary);
+}
+
+/* 버튼 기본 인터랙션 — 전역. 포인터 커서 + 클릭 시 살짝 눌림(tactile).
+   hover 배경은 컴포넌트별 토큰(hover:bg-*) 유지. element 셀렉터로 specificity를 낮춰 Tailwind 유틸리티가 항상 우선. */
+button:not(:disabled) {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button {
+  transition: transform 120ms var(--ease-smooth);
+}
+button:not(:disabled):active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+  button:not(:disabled):active {
+    transform: none;
+  }
+}
+
+
+/* 창 열림 — 마우스 지점(창 중앙)에서 확장되며 열리는 연출 */
+@keyframes window-open {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.window-open {
+  transform-origin: center;
+  animation: window-open 180ms var(--ease-overshoot);
+}
+
+/* 피커 선택 항목 추가 — 아래로 부드럽게 페이드인(신규 항목만 마운트 시 재생) */
+@keyframes item-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-item-in {
+  animation: item-fade-in 220ms var(--ease-smooth);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-item-in {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window-open {
+    animation: none;
+  }
+}
+
+/* 엣지 — 기본선 border-strong, 선택 시 바이올렛 accent. 점선 marching 애니메이션은 React Flow `animated` 기본 제공 */
+.react-flow__edge-path {
+  stroke: var(--color-border-strong);
+  stroke-width: 1.5;
+}
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path,
+.react-flow__edge:focus-visible .react-flow__edge-path {
+  /* 선택 강조 — 선명한 강조색(밝은 바이올렛) + 굵기↑ + 이중 저확산 글로우로 또렷하게 */
+  stroke: var(--color-edge-selected);
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-edge-selected) 70%, transparent))
+    drop-shadow(0 0 5px color-mix(in srgb, var(--color-edge-selected) 35%, transparent));
+}
+/* 출력선 선택 모달(EdgeSelectModal)에서 옵션 행 hover 시 대응 캔버스 엣지 하이라이트(accent).
+   엣지의 인라인 stroke(분기 파스텔/선택 색)보다 우선해야 하므로 !important. */
+.react-flow__edge.edge-hover-highlight .react-flow__edge-path {
+  stroke: var(--color-accent) !important;
+  stroke-width: 3.5 !important;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent) 70%, transparent))
+    drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent) 30%, transparent));
+}
+
+/* 핸들 스타일은 page.tsx의 raw <style>로 이전 — Turbopack이 dev에서 .react-flow__node 셀렉터
+   규칙을 purge하므로 노드 hover 기반 표시가 확실히 먹도록(lessons: canvas-react-flow §5). */
+
+/* 드롭 영역 — 부채꼴 팬 페이드 + 아이콘/라벨 팝 */
+@keyframes zone-fan-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes zone-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.zone-fan {
+  animation: zone-fan-in 200ms var(--ease-smooth);
+}
+.zone-pop {
+  transform-origin: center;
+  animation: zone-pop-in 260ms var(--ease-overshoot);
+}
+
+/* 노드 선택 링 — 2px accent + 4px 소프트 헤일로 (E4). box-shadow라 selected 노드는 hover 그림자 미적용(충돌 회피) */
+.node-ring-selected {
+  box-shadow:
+    0 0 0 2px var(--color-accent),
+    0 0 0 6px color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+/* 그룹 합류 대상 — 노드를 끌어와 박스 위에 머물 때 반투명 반짝임 + 커졌다 작아지기 */
+@keyframes group-target-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 0%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 8%, white);
+  }
+  50% {
+    transform: scale(1.025);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 28%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 18%, white);
+  }
+}
+.group-target {
+  transform-origin: center;
+  border-color: var(--color-accent) !important;
+  animation: group-target-pulse 750ms var(--ease-smooth) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zone-fan,
+  .zone-pop,
+  .group-target {
+    animation: none;
+  }
+}
+
+/* 엣지 디시전 팝업(edge-decision-modal) — 타일 팝(열림 1회) + 아이콘 의미 애니메이션.
+   hover 재생은 컴포넌트가 아이콘 SVG를 key로 리마운트(타일 팝은 재생 안 함).
+   핵심: 각 요소의 '정지 상태 = 최종(그려진) 상태' → 애니메이션이 없어도(감소모션·CSS 캐시) 겹침 없는 깨끗한 최종 아이콘.
+   모두 backwards만 — forwards로 transform/opacity를 물면 전역 버튼 :active 눌림(scale .97)이나 이후 상태가 막힌다. */
+@keyframes edge-tile-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+.edge-tile-pop { animation: edge-tile-pop 320ms var(--ease-overshoot) backwards; }
+
+/* 브랜치: 곡선이 base 원 위 → node 원 좌측으로 뻗어 그려지고 끝 노드가 톡(강조색은 컴포넌트 인라인) */
+@keyframes edge-branch-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.edge-branchline { stroke-dasharray: 1; animation: edge-branch-draw 460ms var(--ease-smooth) 160ms backwards; }
+@keyframes edge-pop-in { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+.edge-branchnode { transform-box: fill-box; transform-origin: center; animation: edge-pop-in 300ms var(--ease-overshoot) 560ms backwards; }
+
+/* 인터셉트: 가운데 박스가 위에서 사이로 드롭 + 커넥터 페이드인. 좌우 박스·커넥터는 테두리만 연결(겹침 없음). */
+@keyframes edge-drop-in { from { opacity: 0; transform: translateY(-120%) scale(0.7); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.edge-box-mid { transform-box: fill-box; transform-origin: center; animation: edge-drop-in 400ms var(--ease-overshoot) 160ms backwards; }
+@keyframes edge-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.edge-conn { animation: edge-fade-in 240ms var(--ease-smooth) 440ms backwards; }
+
+/* EdgeActionModal Replace — 새 노드 C 팝인 → 기존 엣지 페이드아웃 → 새 꺾은선 엣지가 아래로 나와 왼쪽으로 들어가며
+   그려짐(강조색=엣지). Insert는 위 edge-box-mid/edge-conn 재사용. (edge-repl-old는 정지 상태에서 숨김=교체 최종형) */
+@keyframes edge-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.edge-repl-node { transform-box: fill-box; transform-origin: center; animation: edge-pop-in 320ms var(--ease-overshoot) 60ms backwards; }
+.edge-repl-old { opacity: 0; animation: edge-fade-out 460ms var(--ease-smooth) 320ms backwards; }
+.edge-repl-edge { stroke-dasharray: 1; animation: edge-branch-draw 680ms var(--ease-smooth) 520ms backwards; }
+
+/* FlowConflictModal Keep — 새 노드 A 팝인 → 새 엣지 A→B(강조색)가 그려져 B로 합류(기존 X→B 유지) */
+.edge-keep-node { transform-box: fill-box; transform-origin: center; animation: edge-pop-in 320ms var(--ease-overshoot) 120ms backwards; }
+.edge-keep-edge { stroke-dasharray: 1; animation: edge-branch-draw 560ms var(--ease-smooth) 360ms backwards; }
+
+/* EdgeBranchModal Yes/No/Other — Yes 체크·No 엑스는 그려지고(색은 컴포넌트 인라인 branch 색), Other 점 3개 순차 팝.
+   edge-branch-draw/edge-pop-in 키프레임 재사용. 정지 상태=그려진 최종형. */
+.edge-br-check { stroke-dasharray: 1; animation: edge-branch-draw 440ms var(--ease-smooth) 180ms backwards; }
+.edge-br-x1 { stroke-dasharray: 1; animation: edge-branch-draw 260ms var(--ease-smooth) 180ms backwards; }
+.edge-br-x2 { stroke-dasharray: 1; animation: edge-branch-draw 260ms var(--ease-smooth) 380ms backwards; }
+.edge-br-dot { transform-box: fill-box; transform-origin: center; }
+.edge-br-dot1 { animation: edge-pop-in 240ms var(--ease-overshoot) 180ms backwards; }
+.edge-br-dot2 { animation: edge-pop-in 240ms var(--ease-overshoot) 300ms backwards; }
+.edge-br-dot3 { animation: edge-pop-in 240ms var(--ease-overshoot) 420ms backwards; }
+
+/* EdgeSelectModal — 옵션 행 스태거 페이드인(개수 가변 리스트). 정지=최종(보임) 상태. */
+@keyframes edge-row-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+.edge-row-in { animation: edge-row-in 260ms var(--ease-smooth) backwards; }
+
+/* 링크 미리보기 패널 로딩 — 진행 바/링 회전/글로브 펄스/점 페이드 (목업 Node Focus Actions 이식) */
+@keyframes lp-bar { 0% { width: 4%; } 22% { width: 38%; } 55% { width: 66%; } 100% { width: 88%; } }
+@keyframes lp-spin { to { transform: rotate(360deg); } }
+@keyframes lp-pulse { 0%, 100% { opacity: 0.35; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes lp-dot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .edge-tile-pop,
+  .edge-branchline,
+  .edge-branchnode,
+  .edge-box-mid,
+  .edge-conn,
+  .edge-repl-node,
+  .edge-repl-old,
+  .edge-repl-edge,
+  .edge-keep-node,
+  .edge-keep-edge,
+  .edge-br-check,
+  .edge-br-x1,
+  .edge-br-x2,
+  .edge-br-dot1,
+  .edge-br-dot2,
+  .edge-br-dot3,
+  .edge-row-in {
+    animation: none;
+  }
+}
+
+/* 마크다운 뷰어(.md) — AI 답변·게시글·매뉴얼 공용(markdown-view.tsx). 블록 hover=현재 위치·코드블록 복사. */
+.md { font-size: var(--text-caption); color: var(--color-ink-secondary); line-height: 1.55; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md h1 { font-size: 18px; font-weight: 600; color: var(--color-ink); margin: 0.7em 0 0.35em; }
+.md h2 { font-size: 15px; font-weight: 600; color: var(--color-ink); margin: 0.7em 0 0.3em; }
+.md h3 { font-size: 14px; font-weight: 600; color: var(--color-ink); margin: 0.6em 0 0.2em; }
+.md h4, .md h5, .md h6 { font-size: 13px; font-weight: 600; color: var(--color-ink-secondary); margin: 0.55em 0 0.2em; }
+.md p { margin: 0.45em 0; }
+.md ul, .md ol { margin: 0.45em 0; padding-left: 1.3em; }
+.md li { margin: 0.15em 0; }
+/* 인라인 코드는 문장 속이라 흰 채움+강한 테두리, 코드블록·표 헤더는 어두운 회색+흰 글씨로 강조 */
+.md code { font-family: ui-monospace, Menlo, monospace; font-size: 0.88em; background: var(--color-surface); border: 1px solid var(--color-surface-chip); border-radius: 4px; padding: 0.05em 0.35em; }
+.md pre { background: var(--color-ink-secondary); color: var(--color-on-accent); border: 1px solid var(--color-ink-secondary); border-radius: var(--radius-sm); padding: 8px 10px; overflow-x: auto; margin: 0.55em 0; }
+.md pre code { background: none; border: 0; padding: 0; font-size: 0.85em; }
+.md code { cursor: pointer; transition: background-color 0.12s; }
+.md pre code { cursor: text; }
+.md-codeline { cursor: copy; border-radius: 3px; transition: background-color 0.12s; }
+.md-codeline:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.md code.md-copied, .md-codeline.md-copied { background: var(--color-accent-tint); color: var(--color-accent); }
+.md blockquote { border-left: 3px solid var(--color-accent-tint-border); background: var(--color-accent-tint); border-radius: var(--radius-xs); padding: 6px 12px; color: var(--color-ink-secondary); margin: 0.55em 0; }
+.md a { color: var(--color-accent); text-decoration: underline; }
+.md strong { font-weight: 600; color: var(--color-ink); }
+.md hr { border: 0; border-top: 1px solid var(--color-hairline); margin: 0.8em 0; }
+.md-tablewrap { overflow-x: auto; margin: 0.55em 0; }
+.md table { border-collapse: collapse; font-size: 0.95em; }
+.md th, .md td { border: 1px solid var(--color-surface-chip); padding: 4px 9px; text-align: left; white-space: nowrap; }
+.md td { background: var(--color-surface); }
+.md th { background: var(--color-ink-secondary); color: var(--color-on-accent); font-weight: 600; }
+.md-tag { display: inline-block; padding: 0.02em 0.5em; margin: 0 0.08em; border-radius: 999px; background: var(--color-accent-tint); color: var(--color-accent); font-size: 0.82em; font-weight: 600; }
+/* 블록별 hover 하이라이트 — 마우스가 있는 라인(블록) 표시 */
+.md p, .md li, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6, .md blockquote { border-radius: 4px; transition: background-color 0.1s; }
+.md p:hover, .md li:hover, .md h1:hover, .md h2:hover, .md h3:hover, .md h4:hover, .md h5:hover, .md h6:hover { background: color-mix(in srgb, var(--color-accent) 7%, transparent); }
+/* 코드블록 hover 복사 버튼 */
+.md-codewrap { position: relative; }
+.md-copy { position: absolute; top: 6px; right: 6px; display: flex; align-items: center; border: 1px solid var(--color-hairline); background: var(--color-surface); border-radius: var(--radius-xs); padding: 3px; color: var(--color-ink-tertiary); cursor: pointer; opacity: 0; transition: opacity 0.12s; }
+.md-codewrap:hover .md-copy { opacity: 1; }
+.md-copy:hover { color: var(--color-accent); border-color: var(--color-accent); }
+.md-copy-done { color: var(--color-accent); border-color: var(--color-accent-tint-border); background: var(--color-accent-tint); }
+@media (prefers-reduced-motion: reduce) {
+  .md p, .md li, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6, .md blockquote, .md-copy, .md code, .md-codeline { transition: none; }
+}
+
+/* 캔버스 select-none 안에서도 입력/텍스트영역은 텍스트 선택 허용(인라인 리네임·검색 등) */
+.select-none input,
+.select-none textarea,
+.select-none [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}

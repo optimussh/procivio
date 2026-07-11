@@ -1,0 +1,329 @@
+"use client";
+
+// 버전 히스토리 — 좌측 타임라인 노드 + 버전 카드(상태·현재·시각). 평소 이벤트 칩 2줄,
+// 박스 클릭 시 칩 대신 이벤트별 상세 행(단계 필·이름·아이디·시간)으로 펼침. 여러 개 동시 펼침 가능 (H3).
+// 펼침 상태는 부모(map-detail-card)가 보유 — '모두 접기' 공유.
+
+import { useState } from "react";
+
+import { ArrowRight, Check, Clock, GitCommit, type LucideIcon, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
+
+import type { VersionDetail, VersionEvent } from "@/lib/api";
+import { formatKst } from "@/lib/datetime";
+import { formatVersionMarker } from "@/lib/version-name";
+import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
+import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
+
+const EVENT_LABEL: Record<string, MessageKey> = {
+  created: "home.verEvent.created",
+  submitted: "home.verEvent.submitted",
+  approved: "home.verEvent.approved",
+  rejected: "home.verEvent.rejected",
+  published: "home.verEvent.published",
+  withdrawn: "home.verEvent.withdrawn",
+};
+
+// 이벤트 칩/단계 아이콘 / icon per event type.
+function EventIcon({ type }: { type: string }) {
+  if (type === "created") return <Plus size={12} strokeWidth={1.7} />;
+  if (type === "submitted") return <Send size={12} strokeWidth={1.7} />;
+  if (type === "approved") return <Check size={12} strokeWidth={1.7} />;
+  if (type === "rejected") return <X size={12} strokeWidth={1.7} />;
+  if (type === "published") return <Upload size={12} strokeWidth={1.7} />;
+  if (type === "withdrawn") return <Undo2 size={12} strokeWidth={1.7} />;
+  return <GitCommit size={12} strokeWidth={1.7} />;
+}
+
+// 이벤트 칩/단계 필 색 — 생성=중립 · 승인요청=accent · 승인/게시=green · 반려=red.
+const EVENT_CHIP: Record<string, string> = {
+  created: "border-hairline bg-surface-alt text-ink-secondary",
+  submitted: "border-accent-tint-border bg-accent-tint text-accent",
+  approved: "border-added/40 bg-added/10 text-added",
+  published: "border-added/40 bg-added/10 text-added",
+  rejected: "border-error/40 bg-error/10 text-error",
+  withdrawn: "border-changed/40 bg-changed/10 text-changed",
+};
+
+// 타임라인 노드 — 최신 이벤트 기준 색·아이콘(승인/게시=채움 green).
+function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon } {
+  switch (eventType) {
+    case "created":
+      return { cls: "border-accent bg-surface text-accent", Icon: Plus };
+    case "submitted":
+      return { cls: "border-changed bg-surface text-changed", Icon: Clock };
+    case "approved":
+      return { cls: "border-added bg-added text-on-accent", Icon: Check };
+    case "published":
+      return { cls: "border-added bg-added text-on-accent", Icon: Upload };
+    case "rejected":
+      return { cls: "border-error bg-surface text-error", Icon: X };
+    case "withdrawn":
+      return { cls: "border-changed bg-surface text-changed", Icon: Undo2 };
+    default:
+      return { cls: "border-hairline bg-surface text-ink-tertiary", Icon: GitCommit };
+  }
+}
+
+// created_at(ISO) → "YYYY-MM-DD HH:mm" KST.
+const formatStamp = formatKst;
+
+export function VersionTimeline({
+  versions,
+  nameById,
+  expandedIds,
+  onToggle,
+  onGoToVersion,
+  currentVersionId,
+}: {
+  versions: VersionDetail[];
+  // login_id → 표시명 / id→name.
+  nameById?: Map<string, string>;
+  // 펼친 버전 id 집합(부모 보유) / expanded version ids (parent-owned).
+  expandedIds: Set<number>;
+  onToggle: (id: number) => void;
+  // 이 버전으로 전환 — 지정 시 펼친 카드에 "이 버전으로 가기" 버튼 노출(현재 보는 버전 제외).
+  onGoToVersion?: (id: number) => void;
+  // 현재 보고 있는 버전 — 그 카드엔 버튼 숨김.
+  currentVersionId?: number | null;
+}) {
+  const { t } = useI18n();
+  const nameOf = (id: string) => nameById?.get(id) ?? id;
+  // 최근 3개만 기본 노출 — 나머지는 더보기로 접어둠 (2026-07-11 요청)
+  const [showAll, setShowAll] = useState(false);
+  const ordered = [...versions].reverse(); // idx 0 = 최신 = Current
+  const visibleVersions = showAll ? ordered : ordered.slice(0, 3);
+  const hiddenCount = ordered.length - 3;
+
+  return (
+    <div data-id="version-timeline" className="relative flex flex-col gap-3">
+      {/* 좌측 세로 연결선 / left timeline rail */}
+      <span aria-hidden className="absolute bottom-3 left-[11px] top-3 w-px bg-hairline" />
+      {/* 최신 버전이 위로 — idx 0 = 최신 = Current / newest first. */}
+      {visibleVersions.map((version, idx) => {
+        // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준 / events newest-first.
+        // 회수는 백엔드에서 조건부 기록(승인 1건 이상일 때만) — 남아 있으면 그대로 표시.
+        const events: VersionEvent[] = [...version.events].reverse();
+        // 접힘 칩 — 게시는 우측 고정·이름 생략(툴팁으로), 나머지 승인내역은 1줄만 (2026-07-11 요청)
+        const publishedEvt = events.find((evt) => evt.event_type === "published");
+        const chipEvents = events.filter((evt) => evt.event_type !== "published");
+        // 상세행 — 날짜/시각 분리. 같은 날짜 연속이면 날짜 박스 1개가 그 행들 높이만큼 span(rowspan), 날짜 윗 정렬 (H3)
+        const rawRows = events.map((evt) => {
+          const full = formatStamp(evt.created_at);
+          const sep = full.indexOf(" ");
+          return {
+            evt,
+            date: sep >= 0 ? full.slice(0, sep) : full,
+            time: sep >= 0 ? full.slice(sep + 1) : "",
+          };
+        });
+        const detailRows = rawRows.map((r, i) => {
+          if (i > 0 && rawRows[i - 1]?.date === r.date) return { ...r, dateSpan: 0 };
+          let span = 1;
+          while (i + span < rawRows.length && rawRows[i + span]?.date === r.date) span += 1;
+          return { ...r, dateSpan: span };
+        });
+        const node = nodeFor(events[0]?.event_type);
+        const NodeIcon = node.Icon;
+        const open = expandedIds.has(version.id);
+        // sticky 1열 배경 = 카드 배경(현재 카드 연보라)에 맞춤 — 흰 열로 튀지 않게, hover도 동기화
+        const cardBg =
+          idx === 0
+            ? "bg-accent-tint/30 group-hover:bg-accent-tint/50"
+            : "bg-surface group-hover:bg-surface-alt";
+        return (
+          <div key={version.id} className="relative flex gap-2.5">
+            <span
+              className={`z-[1] mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${node.cls}`}
+            >
+              <NodeIcon size={13} strokeWidth={2} />
+            </span>
+            <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={open}
+              onClick={() => onToggle(version.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onToggle(version.id);
+                }
+              }}
+              className={`group min-w-0 flex-1 cursor-pointer rounded-md border p-2.5 transition-colors ${
+                idx === 0
+                  ? "border-accent-tint-border bg-accent-tint/30 hover:bg-accent-tint/50"
+                  : "border-hairline bg-surface hover:bg-surface-alt"
+              }`}
+            >
+              {/* 우측 날짜는 제목과 세로 중앙정렬 (items-center) */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  {/* 버전 마커 + 이름 — 버전 필과 동일(번호 작게 회색·이름 강조). 좁아지면 이름 말줄임.
+                      flex-1 없음 — 상태 필이 이름 바로 우측에 붙는다. */}
+                  <span className="min-w-0 truncate">
+                    <span className="text-fine text-ink-tertiary">{formatVersionMarker(version, versions)}</span>{" "}
+                    <span className="text-caption-strong text-ink">{version.label}</span>
+                  </span>
+                  {/* 상태 필 ↔ 호버 스왑 — 같은 자리에 겹쳐 두고 카드 호버 시 페이드 교체(map-card recent-badge 패턴).
+                      펼침: "이 버전으로 가기" 버튼(이동 가능 카드만) / 접힘: "클릭=상세" 안내 필.
+                      상태 필은 pointer-events-none — opacity<1이 스태킹 컨텍스트를 만들어 투명해진 필이
+                      버튼 좌측 클릭을 삼키던 버그 방지. */}
+                  {(() => {
+                    const canGo = open && !!onGoToVersion && version.id !== currentVersionId;
+                    const showHint = !open; // 접힘 카드 — 클릭하면 펼쳐진다는 안내
+                    return (
+                      <span className="grid shrink-0 items-center justify-items-start">
+                        {/* 크로스페이드 700ms(토큰 최장) — 호버 초반에 상태 필이 남아 있어 상태를 인지하고 스왑된다 */}
+                        <span
+                          className={`pointer-events-none col-start-1 row-start-1 whitespace-nowrap rounded-xs border px-1.5 py-0.5 text-fine transition-opacity duration-700 ease-smooth ${
+                            VERSION_STATUS_STYLE[version.status]
+                          } ${canGo || showHint ? "group-hover:opacity-0" : ""}`}
+                        >
+                          {t(VERSION_STATUS_LABEL[version.status])}
+                        </span>
+                        {canGo && onGoToVersion && (
+                          /* 페이드는 래퍼(700ms), 버튼 자체의 색 호버는 분리해 빠릿하게(150ms) */
+                          <span className="pointer-events-none col-start-1 row-start-1 opacity-0 transition-opacity duration-700 ease-smooth group-hover:pointer-events-auto group-hover:opacity-100">
+                            <button
+                              type="button"
+                              data-id={`version-go-${version.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onGoToVersion(version.id);
+                              }}
+                              className="inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-accent/40 bg-accent-tint px-1.5 py-0.5 text-fine text-accent transition-colors duration-150 hover:border-accent hover:bg-accent hover:text-on-accent"
+                            >
+                              <ArrowRight size={12} strokeWidth={1.5} />
+                              {t("home.goToVersion")}
+                            </button>
+                          </span>
+                        )}
+                        {showHint && (
+                          <span
+                            data-id={`version-hint-${version.id}`}
+                            className="pointer-events-none col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-700 ease-smooth group-hover:opacity-100"
+                          >
+                            <MousePointerClick size={12} strokeWidth={1.5} />
+                            {t("home.verClickHint")}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })()}
+                </span>
+                <span className="shrink-0 text-fine text-ink-tertiary">{formatStamp(version.created_at)}</span>
+              </div>
+
+              {events.length > 0 && (
+                <>
+                  {/* 평소: 이벤트 칩 2줄 — 펼치면 접힘(상세 펼침과 동시 전환 → 높이가 줄었다 커지지 않음) / chips collapse as detail expands */}
+                  <div
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      open ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      {/* 1줄 고정 — 넘치는 칩은 잘림. 게시 칩은 우측 고정·이름 생략(이름은 툴팁) */}
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <div className="flex min-w-0 flex-1 flex-nowrap gap-1.5 overflow-hidden">
+                          {chipEvents.map((evt) => (
+                            <span
+                              key={evt.id}
+                              data-id={`version-event-${evt.id}`}
+                              className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                                EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
+                              }`}
+                              title={EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
+                            >
+                              <EventIcon type={evt.event_type} />
+                              {nameOf(evt.actor)}
+                            </span>
+                          ))}
+                        </div>
+                        {publishedEvt && (
+                          <span
+                            data-id={`version-event-${publishedEvt.id}`}
+                            title={`${t("home.verEvent.published")} — ${nameOf(publishedEvt.actor)}`}
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${EVENT_CHIP.published}`}
+                          >
+                            <EventIcon type="published" />
+                            {t("home.verEvent.published")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 펼침: 이벤트별 상세 행(단계 필·이름·아이디·시간) — 칩이 접히는 만큼 동시에 펼침 / detail expands as chips collapse */}
+                  <div
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      {/* 좁은 사이드바 대응 — 가로 스크롤(스크롤바 숨김), 1열(단계 필) sticky 고정으로 시간대 확인.
+                          넓은 폭(홈 상세)에선 w-full로 채워 이름 열이 늘어나 날짜/시간이 우측 정렬. */}
+                      <div className="mt-1.5 overflow-x-auto scrollbar-hidden">
+                      <table className="w-full min-w-max border-separate border-spacing-x-2 border-spacing-y-1 text-fine">
+                        <tbody>
+                          {detailRows.map(({ evt, date, time, dateSpan }) => (
+                            <tr key={evt.id} className="align-middle">
+                              <td className={`sticky left-0 z-[1] w-24 ${cardBg}`}>
+                                <span
+                                  className={`inline-flex w-24 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
+                                    EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
+                                  }`}
+                                >
+                                  <EventIcon type={evt.event_type} />
+                                  {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
+                                </span>
+                              </td>
+                              {/* 이름 + 아이디(작게, 바로 옆) — 최대폭 말줄임으로 사이드바 가로 스크롤 억제 */}
+                              <td className="text-ink">
+                                <span className="flex min-w-0 items-baseline gap-1">
+                                  <span className="max-w-[7rem] truncate">{nameOf(evt.actor)}</span>
+                                  <span className="max-w-[5rem] shrink-0 truncate text-[10px] text-ink-tertiary">
+                                    {evt.actor}
+                                  </span>
+                                </span>
+                              </td>
+                              {dateSpan > 0 && (
+                                <td
+                                  rowSpan={dateSpan}
+                                  className="w-24 whitespace-nowrap rounded-xs border border-border-strong px-1.5 py-0.5 text-center align-top text-ink-tertiary"
+                                >
+                                  {/* 박스 = td 테두리(rowspan 높이) → 여러 행을 덮되 상단·하단이 첫/마지막 시간 박스와 정렬. 날짜 텍스트는 박스 위쪽(align-top). */}
+                                  {date}
+                                </td>
+                              )}
+                              {/* 시간 박스 = td 테두리(행 높이 채움) → 날짜 박스와 상하 정확히 정렬. 폭 고정. */}
+                              <td className="w-14 whitespace-nowrap rounded-xs border border-border-strong px-1.5 py-0.5 text-center align-middle text-ink-tertiary">
+                                {time}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {/* 4개 이상이면 접어두고 더보기 — 노드 열 폭만큼 들여쓰기해 카드와 정렬 */}
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          data-id="version-show-more"
+          className="z-[1] ml-9 self-start text-fine text-accent hover:underline"
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll ? t("home.verShowLess") : t("home.verShowMore", { count: hiddenCount })}
+        </button>
+      )}
+    </div>
+  );
+}

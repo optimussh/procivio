@@ -1,0 +1,533 @@
+"use client";
+
+// 유저 그룹 목록 + 생성 요청 — 설정 콘솔 "Groups" 탭 (이전 /groups 페이지에서 추출) /
+// User group list + create-request, rendered as the Settings console "Groups" tab.
+// 서버가 진실 — 목록 GET /api/groups, 생성 POST /api/groups. 변경 후 재조회(낙관적 갱신 금지).
+// 멤버 피커는 실 디렉터리(getDirectory). 생성 시 ≥2 멤버 필수(클라 차단 + 서버 422).
+
+import { useCallback, useEffect, useState } from "react";
+import { Users } from "lucide-react";
+
+import { ModalBackdrop } from "@/components/modal-backdrop";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
+import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
+import { GroupActions } from "@/components/groups/group-actions";
+import { GroupDetail } from "@/components/groups/group-detail";
+import { GroupsGuide } from "@/components/groups/groups-guide";
+import {
+  checkGroupName,
+  createGroup,
+  deleteGroup,
+  getDirectory,
+  listGroups,
+  type DirectoryDept,
+  type DirectoryUser,
+  type Group,
+  type GroupStatus,
+} from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
+import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
+import { genId } from "@/lib/id";
+import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
+
+// 그룹 상태 pill — Group.status는 pending/active/rejected /
+// Group status pill: pending / active / rejected.
+function GroupStatusBadge({ status }: { status: GroupStatus }) {
+  const { t } = useI18n();
+  const styles: Record<GroupStatus, string> = {
+    active: "border-added text-added",
+    pending: "border-changed text-changed",
+    rejected: "border-error text-error",
+    inactive: "border-divider text-ink-tertiary",
+  };
+  const labels: Record<GroupStatus, string> = {
+    active: t("perm.group.statusActive"),
+    pending: t("perm.group.statusPending"),
+    rejected: t("perm.group.statusRejected"),
+    inactive: t("perm.group.statusInactive"),
+  };
+  return (
+    <span className={`rounded-sm border px-1.5 py-0.5 text-fine ${styles[status]}`}>
+      {labels[status]}
+    </span>
+  );
+}
+
+// 멤버 피커 아이템 — dept 또는 user / Member entry restricted to department or user.
+type MemberEntry = { type: "department" | "user"; id: string; displayName: string };
+
+// 관리자 피커 아이템 — user만 / Manager entry restricted to user only.
+type ManagerEntry = { id: string; displayName: string };
+
+export function GroupsPanel() {
+  const { t } = useI18n();
+
+  // 서버 그룹 목록 / Server-sourced group list.
+  const [groups, setGroups] = useState<Group[]>([]);
+  // 25개씩 증분 렌더 — 그룹 카드가 늘어도 그리드 렌더 부하 없음
+  const { visible: shownGroups, hasMore, sentinelRef } = useInfiniteSlice(groups, "");
+  // 인라인 상세로 펼친 카드 id (단일) / id of the card expanded inline.
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [addMemberOpen, setAddMemberOpen] = useState(false); // 멤버 추가 다이얼로그(펼친 그룹용) — 헤더 버튼이 연다
+  // 실 디렉터리 — 피커 후보 / Real directory for picker candidates.
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
+
+  // 다이얼로그 / Dialog open state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // 생성 요청 폼 / Create-request form state
+  const [name, setName] = useState("");
+  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null); // 실시간 이름 중복 검사
+  const [description, setDescription] = useState("");
+  const [members, setMembers] = useState<MemberEntry[]>([]);
+  const [managers, setManagers] = useState<ManagerEntry[]>([]);
+  const [reRequestId, setReRequestId] = useState<number | null>(null); // 재신청 시 정리할 기존 거절 그룹
+
+  // 토스트 / Toast state
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  function addToast(message: string) {
+    setToasts((prev) => [{ id: genId(), message }, ...prev]);
+  }
+
+  function dismissToast(id: string) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  // 인라인 편집(멤버/관리자 변경) 결과를 목록 state에 반영 / reflect inline edits into the list.
+  const updateGroup = (updated: Group) => {
+    setGroups((prev) => prev.map((g) => (g.id === updated.id ? updated : g)));
+  };
+
+  const reloadGroups = useCallback(async () => {
+    try {
+      setGroups(await listGroups());
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  // 초기 로드 — 그룹 목록 + 디렉터리 / Initial load: groups + directory.
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const [groupRows, dir] = await Promise.all([listGroups(), getDirectory()]);
+        if (active) {
+          setGroups(groupRows);
+          setDirUsers(dir.users);
+          setDirDepts(dir.departments);
+        }
+      } catch (err) {
+        if (active) addToast(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // 이름 중복 실시간 검사 — 디바운스 후 서버 조회(전역 중복 금지). 빈 입력/판정전은 null.
+  useEffect(() => {
+    let active = true;
+    const id = setTimeout(() => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        if (active) setNameAvailable(null);
+        return;
+      }
+      void checkGroupName(trimmed)
+        .then((r) => {
+          if (active) setNameAvailable(r.available);
+        })
+        .catch(() => {});
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(id);
+    };
+  }, [name]);
+
+  // 실 디렉터리를 피커 prop 형식으로 변환 (미사용 필드 stub) /
+  // Adapt real directory to picker's MockUser / Department shapes.
+  const pickerUsers: MockUser[] = dirUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: "",
+    departmentId: "",
+    status: "active" as const,
+    isSysadmin: false,
+    korean_name: u.korean_name ?? "",
+  }));
+  const pickerDepts: Department[] = dirDepts.map((d) => ({
+    id: d.id,
+    code: "",
+    name: d.name,
+    orgLevels: [],
+    parentId: null,
+    rawDn: "",
+    korean_name: d.korean_name,
+    manager: d.manager,
+  }));
+
+  function openDialog() {
+    setName("");
+    setNameAvailable(null);
+    setDescription("");
+    setMembers([]);
+    setManagers([]);
+    setReRequestId(null);
+    setDialogOpen(true);
+  }
+
+  // 재신청 — 거절 그룹 값을 생성 모달에 프리필 후 열기(수정 뒤 제출 유도) / re-request: prefill the create dialog.
+  function handleReRequest(group: Group) {
+    setName(group.name);
+    setNameAvailable(null);
+    setDescription(group.description);
+    setMembers(
+      group.members.map((m) => ({
+        type: m.member_type,
+        id: m.member_id,
+        displayName:
+          m.member_type === "department"
+            ? (dirDepts.find((d) => d.id === m.member_id)?.name ?? m.member_id)
+            : (dirUsers.find((u) => u.id === m.member_id)?.name ?? m.member_id),
+      })),
+    );
+    setManagers(
+      group.managers.map((id) => ({
+        id,
+        displayName: dirUsers.find((u) => u.id === id)?.name ?? id,
+      })),
+    );
+    setReRequestId(group.id);
+    setExpandedId(null);
+    setDialogOpen(true);
+  }
+
+  function closeDialog() {
+    setDialogOpen(false);
+    setReRequestId(null);
+  }
+
+  // 멤버 추가 — dept + user만 / Add member (department or user only).
+  function handleMemberSelect(opt: PrincipalOption) {
+    if (opt.principalType === "group") return;
+    // 복합키(type:id)로 중복 체크 / Dedup by composite type:id.
+    if (members.some((m) => m.type === opt.principalType && m.id === opt.principalId)) return;
+    setMembers((prev) => [
+      ...prev,
+      { type: opt.principalType as "department" | "user", id: opt.principalId, displayName: opt.displayName },
+    ]);
+  }
+
+  // 관리자 추가 — user만 / Add manager (user only).
+  function handleManagerSelect(opt: PrincipalOption) {
+    if (opt.principalType !== "user") return;
+    if (managers.some((m) => m.id === opt.principalId)) return;
+    setManagers((prev) => [...prev, { id: opt.principalId, displayName: opt.displayName }]);
+  }
+
+  function removeMember(type: "department" | "user", id: string) {
+    setMembers((prev) => prev.filter((m) => !(m.type === type && m.id === id)));
+    // 멤버에서 빠진 user는 매니저에서도 제거 (매니저⊆멤버) / drop from managers too.
+    if (type === "user") setManagers((prev) => prev.filter((m) => m.id !== id));
+  }
+
+  function removeManager(id: string) {
+    setManagers((prev) => prev.filter((m) => m.id !== id));
+  }
+
+  // 제출 — createGroup 호출 후 목록 재조회 / Submit — createGroup then refetch list.
+  async function handleSubmit() {
+    if (submitDisabled) return;
+    setSubmitting(true);
+    try {
+      await createGroup(
+        name.trim(),
+        description.trim(),
+        members.map((m) => ({ member_type: m.type, member_id: m.id })),
+        managers.map((m) => m.id),
+      );
+      // 재신청이면 새 요청 생성 후 기존 거절 그룹 제거 / re-request: remove the old rejected group.
+      if (reRequestId !== null) {
+        try {
+          await deleteGroup(reRequestId);
+        } catch {
+          /* 이미 정리됐을 수 있음 — 무시 / may already be gone */
+        }
+      }
+      addToast(t("perm.group.toastRequested"));
+      closeDialog();
+      await reloadGroups();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // 제출 비활성 — 이름 필수 + 멤버 ≥2 (서버 규칙) + 관리자 ≥1 / Disable until name, ≥2 members, ≥1 manager.
+  const submitDisabled =
+    !name.trim() ||
+    nameAvailable === false ||
+    members.length < 2 ||
+    managers.length === 0 ||
+    submitting;
+
+  // 피커 제외 — id 기반(PrincipalPicker가 principalId로만 비교) / Picker exclusion (id-only).
+  const memberExcludeIds = new Set(members.map((m) => m.id));
+  const managerExcludeIds = new Set(managers.map((m) => m.id));
+  // 매니저 후보 = 멤버(user)만 — 매니저는 멤버 중에서 지정 / managers chosen from member users.
+  const memberUserIds = new Set(members.filter((m) => m.type === "user").map((m) => m.id));
+  const managerCandidates = pickerUsers.filter((u) => memberUserIds.has(u.id));
+
+  return (
+    <div className="flex max-w-4xl flex-col gap-4">
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
+      {/* 헤더 / Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users size={16} strokeWidth={1.5} className="text-ink-tertiary" />
+          <p className="text-body-strong text-ink">{t("perm.group.pageTitle")}</p>
+        </div>
+        <button
+          type="button"
+          className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+          onClick={openDialog}
+        >
+          {t("perm.group.createBtn")}
+        </button>
+      </div>
+
+      {/* 상단 안내 — 목적 + 신청→승인→사용 SVG 가이드 / header guide */}
+      <GroupsGuide />
+
+      {/* 그룹 목록 / Group list */}
+      {groups.length === 0 ? (
+        <p className="text-caption text-ink-tertiary">{t("perm.group.noGroups")}</p>
+      ) : (
+        <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+          {shownGroups.map((group) => {
+            const expanded = expandedId === group.id;
+            return (
+              <div
+                key={group.id}
+                data-id="group-card"
+                className={`flex flex-col rounded-md border bg-surface ${
+                  expanded ? "border-accent sm:col-span-2" : "border-hairline"
+                }`}
+              >
+                {/* 요약(클릭=토글) — 풀폭이라 상태 배지가 카드 우측끝에 정렬 / full-width so the status badge stays right-aligned */}
+                <button
+                  type="button"
+                  className={`flex w-full flex-col gap-2 p-4 text-left ${
+                    expanded ? "rounded-t-md" : "rounded-md hover:bg-surface-alt"
+                  }`}
+                  onClick={() => {
+                    setAddMemberOpen(false);
+                    setExpandedId(expanded ? null : group.id);
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Users size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                      <span className="truncate text-caption-strong text-ink">{group.name}</span>
+                    </span>
+                    <GroupStatusBadge status={group.status} />
+                  </div>
+                  {group.description && (
+                    <span className="line-clamp-2 text-fine text-ink-tertiary">
+                      {group.description}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1 pt-1 text-fine text-ink-tertiary">
+                    <Users size={11} strokeWidth={1.5} className="shrink-0" />
+                    {group.members.length}
+                  </span>
+                </button>
+
+                {/* 라이프사이클 + 멤버추가 액션 — 카운트 아래 우측 정렬 (펼침 시) / actions row, right-aligned */}
+                {expanded && (
+                  <div className="-mt-2 flex justify-end px-4 pb-3">
+                    <GroupActions
+                      group={group}
+                      onGroupChange={updateGroup}
+                      onGroupGone={() => {
+                        setExpandedId(null);
+                        void reloadGroups();
+                      }}
+                      onReRequest={handleReRequest}
+                      onAddMember={() => setAddMemberOpen(true)}
+                      onToast={addToast}
+                    />
+                  </div>
+                )}
+
+                {/* 인라인 상세 — 멤버·매니저 편집 (공용 GroupDetail) / inline detail */}
+                {expanded && (
+                  <div className="border-t border-hairline px-4 py-3">
+                    <GroupDetail
+                      group={group}
+                      dirUsers={dirUsers}
+                      dirDepts={dirDepts}
+                      onGroupChange={updateGroup}
+                      addMemberOpen={addMemberOpen}
+                      onAddMemberClose={() => setAddMemberOpen(false)}
+                      onToast={addToast}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {hasMore && <div ref={sentinelRef} className="col-span-full h-px" />}
+        </div>
+      )}
+
+      {/* 생성 요청 다이얼로그 / Create-request dialog */}
+      {dialogOpen && (
+        <ModalBackdrop
+          onClose={closeDialog}
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30 backdrop-blur-sm"
+        >
+          <div className="flex w-[480px] max-w-[calc(100vw-2rem)] flex-col gap-4 rounded-md border border-hairline bg-surface p-6 shadow-lg">
+            <p className="text-body-strong text-ink">{t("perm.group.createTitle")}</p>
+
+            {/* 이름 / Name */}
+            <div className="flex flex-col gap-1">
+              <label className="text-fine text-ink-tertiary">{t("perm.group.nameLabel")}</label>
+              <input
+                type="text"
+                className={`rounded-sm border bg-transparent px-2 py-1.5 text-caption text-ink outline-none placeholder:text-ink-tertiary ${
+                  nameAvailable === false
+                    ? "border-error focus:border-error"
+                    : "border-hairline focus:border-accent"
+                }`}
+                placeholder={t("perm.group.namePlaceholder")}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoFocus
+              />
+              {nameAvailable === false && (
+                <p className="text-fine text-error">{t("perm.group.nameTaken")}</p>
+              )}
+            </div>
+
+            {/* 설명 / Description */}
+            <div className="flex flex-col gap-1">
+              <label className="text-fine text-ink-tertiary">{t("perm.group.descLabel")}</label>
+              <textarea
+                className="rounded-sm border border-hairline bg-transparent px-2 py-1.5 text-caption text-ink outline-none focus:border-accent placeholder:text-ink-tertiary resize-none"
+                placeholder={t("perm.group.descPlaceholder")}
+                rows={2}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+
+            {/* 멤버 (부서+개인) / Members (dept + user) */}
+            <div className="flex flex-col gap-1">
+              <label className="text-fine text-ink-tertiary">{t("perm.group.membersLabel")}</label>
+              {members.length > 0 && (
+                <div className="scroll-soft mb-1 flex max-h-[6rem] flex-wrap gap-1">
+                  {members.map((m) => (
+                    <span
+                      key={`${m.type}:${m.id}`}
+                      className="animate-item-in flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-fine text-ink"
+                    >
+                      {m.displayName}
+                      <button
+                        type="button"
+                        className="text-ink-tertiary hover:text-error"
+                        onClick={() => removeMember(m.type, m.id)}
+                        aria-label={t("perm.group.removeBtn")}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* dept + user만 — groups: [] / Pass groups: [] to restrict to dept+user. */}
+              <PrincipalPicker
+                users={pickerUsers}
+                departments={pickerDepts}
+                groups={[]}
+                excludeIds={memberExcludeIds}
+                deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
+                onSelect={handleMemberSelect}
+              />
+              {/* ≥2 멤버 안내 — 미달이면 표시 / Min-2 hint when below threshold. */}
+              {members.length < 2 && (
+                <p className="text-fine text-error">{t("perm.group.minMembersHint")}</p>
+              )}
+            </div>
+
+            {/* 관리자 (user만) / Managers (user only) */}
+            <div className="flex flex-col gap-1">
+              <label className="text-fine text-ink-tertiary">{t("perm.group.managersLabel")}</label>
+              {managers.length > 0 && (
+                <div className="scroll-soft mb-1 flex max-h-[6rem] flex-wrap gap-1">
+                  {managers.map((m) => (
+                    <span
+                      key={m.id}
+                      className="animate-item-in flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-fine text-ink"
+                    >
+                      {m.displayName}
+                      <button
+                        type="button"
+                        className="text-ink-tertiary hover:text-error"
+                        onClick={() => removeManager(m.id)}
+                        aria-label={t("perm.group.removeBtn")}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* 멤버(user)만 — 매니저는 멤버 중에서 지정 / managers chosen from member users. */}
+              <PrincipalPicker
+                users={managerCandidates}
+                departments={[]}
+                groups={[]}
+                excludeIds={managerExcludeIds}
+                onSelect={handleManagerSelect}
+              />
+              {memberUserIds.size === 0 && (
+                <p className="text-fine text-ink-tertiary">
+                  {t("perm.group.managerFromMembersHint")}
+                </p>
+              )}
+            </div>
+
+            {/* 액션 버튼 / Action buttons */}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                onClick={closeDialog}
+              >
+                {t("perm.group.cancelBtn")}
+              </button>
+              <button
+                type="button"
+                className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                onClick={() => void handleSubmit()}
+                disabled={submitDisabled}
+              >
+                {t("perm.group.submitBtn")}
+              </button>
+            </div>
+          </div>
+        </ModalBackdrop>
+      )}
+    </div>
+  );
+}

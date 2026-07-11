@@ -1,0 +1,716 @@
+"""사용자 그룹 관리 API 테스트 (Layer 4 Task 3b, brief).
+
+test_permission_endpoints.py 의 enforce/act_as/_seed 패턴을 따른다 — auth_enabled=True 로
+is_sysadmin 을 차별화해 실제 403/422/409 와 sysadmin 게이트를 검증한다. 마지막 테스트는
+승인된 그룹 grant 가 멤버에게 역할을 부여하고 pending 그룹은 부여하지 않음을 end-to-end 로 묶는다.
+"""
+
+import asyncio
+from collections.abc import Iterator
+from datetime import timedelta
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+import app.auth as auth_mod
+from app.db import SessionLocal
+from app.main import app
+from app.models import Employee, MapVersion, ProcessMap, UserGroup, _now
+from app.permissions.access import get_effective_role
+from app.settings import settings
+
+SYSADMIN = "admin.sys"
+
+
+@pytest.fixture
+def enforce(client: TestClient) -> Iterator[None]:
+    """enforcement ON: auth_enabled=True + sysadmin 1명 지정. 정리 시 복원."""
+    prev_auth = settings.auth_enabled
+    prev_sys = settings.bpm_sysadmins
+    settings.auth_enabled = True
+    settings.bpm_sysadmins = SYSADMIN
+    yield
+    settings.auth_enabled = prev_auth
+    settings.bpm_sysadmins = prev_sys
+    app.dependency_overrides.pop(auth_mod.get_current_user, None)
+
+
+def act_as(user: str) -> None:
+    app.dependency_overrides[auth_mod.get_current_user] = lambda: user
+
+
+def _seed(coro_factory) -> object:
+    async def _run() -> object:
+        async with SessionLocal() as session:
+            result = await coro_factory(session)
+            await session.commit()
+            return result
+
+    return asyncio.run(_run())
+
+
+def seed_employee(login_id: str, org_levels: tuple[str | None, ...]) -> None:
+    l1, l2, l3 = (org_levels + (None, None, None))[:3]
+
+    async def _make(session) -> None:
+        emp = await session.get(Employee, login_id)
+        if emp is None:
+            emp = Employee(login_id=login_id, name=login_id, source="ad", role="user")
+            session.add(emp)
+        emp.org_l1, emp.org_l2, emp.org_l3 = l1, l2, l3
+        emp.department = l3 or l2 or l1 or ""
+
+    _seed(_make)
+
+
+def seed_map(visibility: str = "private") -> int:
+    async def _make(session) -> int:
+        m = ProcessMap(name="group api map", visibility=visibility, owner_id=None)
+        m.versions.append(MapVersion(label="As-Is"))
+        session.add(m)
+        await session.flush()
+        return m.id
+
+    return _seed(_make)  # type: ignore[return-value]
+
+
+def effective_role_of(map_id: int, user: str) -> str | None:
+    async def _get(session) -> str | None:
+        return await get_effective_role(session, user, map_id)
+
+    return _seed(_get)  # type: ignore[return-value]
+
+
+_name_seq = [0]
+
+
+def _create_group(
+    client: TestClient,
+    members: list[dict],
+    name: str = "",
+    managers: list[str] | None = None,
+) -> "dict | int":
+    # 이름 전역 중복 금지(409)라 default는 매 호출 고유값 / unique default name per call.
+    if not name:
+        _name_seq[0] += 1
+        name = f"grp-auto-{_name_seq[0]}"
+    body = {"name": name, "description": "", "members": members}
+    if managers is not None:
+        body["managers"] = managers
+    r = client.post("/api/groups", json=body)
+    return r
+
+
+# ── create — ≥2 member validation + creator auto-manager ──────
+
+
+def test_create_group_two_members_pending_creator_manager(
+    client: TestClient, enforce: None
+) -> None:
+    act_as("u.creator")
+    r = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["status"] == "pending"
+    assert body["created_by"] == "u.creator"
+    assert "u.creator" in body["managers"]  # 생성자 자동 관리자
+    assert len(body["members"]) == 2
+
+
+def test_create_group_one_member_422(client: TestClient, enforce: None) -> None:
+    act_as("u.creator")
+    r = _create_group(client, members=[{"member_type": "user", "member_id": "u.a"}])
+    assert r.status_code == 422
+
+
+def test_create_group_extra_managers_included(
+    client: TestClient, enforce: None
+) -> None:
+    act_as("u.creator")
+    r = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.helper"},  # 매니저는 멤버(user) 중에서
+        ],
+        managers=["u.helper"],
+    )
+    assert r.status_code == 201
+    managers = r.json()["managers"]
+    assert "u.creator" in managers and "u.helper" in managers
+
+
+def test_create_group_manager_not_member_422(
+    client: TestClient, enforce: None
+) -> None:
+    """매니저는 그룹 멤버(user) 중에서만 — 비-멤버 매니저 지정은 422."""
+    act_as("u.creator")
+    r = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+        managers=["u.outsider"],
+    )
+    assert r.status_code == 422
+
+
+# ── list visibility ───────────────────────────────────────────
+
+
+def test_list_visibility_belongs_only(
+    client: TestClient, enforce: None
+) -> None:
+    """sysadmin은 전체, 일반 유저는 '자신이 해당하는' 그룹(생성자/멤버)만 본다."""
+    # creator1 의 그룹 (멤버 u.a, u.b)
+    act_as("creator1")
+    g1 = _create_group(
+        client,
+        name="grp1",
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+    ).json()
+    # creator2 의 그룹 (멤버 u.c, u.d) → sysadmin approve → active
+    act_as("creator2")
+    g2 = _create_group(
+        client,
+        name="grp2",
+        members=[
+            {"member_type": "user", "member_id": "u.c"},
+            {"member_type": "user", "member_id": "u.d"},
+        ],
+    ).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g2['id']}/decide", json={"decision": "approve"})
+
+    # sysadmin → 둘 다 보임
+    ids = {g["id"] for g in client.get("/api/groups").json()}
+    assert g1["id"] in ids and g2["id"] in ids
+
+    # creator1 → 자기 그룹(g1)만, 안 속한 active g2는 안 보임
+    act_as("creator1")
+    ids = {g["id"] for g in client.get("/api/groups").json()}
+    assert g1["id"] in ids and g2["id"] not in ids
+
+    # u.c (g2 멤버) → g2 보임
+    act_as("u.c")
+    ids = {g["id"] for g in client.get("/api/groups").json()}
+    assert g2["id"] in ids
+
+    # stranger → 둘 다 안 보임 (active 라도)
+    act_as("stranger")
+    ids = {g["id"] for g in client.get("/api/groups").json()}
+    assert g1["id"] not in ids and g2["id"] not in ids
+
+
+def test_detail_others_pending_404(client: TestClient, enforce: None) -> None:
+    act_as("creator1")
+    g1 = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+    ).json()
+    act_as("stranger")
+    assert client.get(f"/api/groups/{g1['id']}").status_code == 404
+    act_as("creator1")
+    assert client.get(f"/api/groups/{g1['id']}").status_code == 200
+
+
+# ── pending queue — sysadmin only ─────────────────────────────
+
+
+def test_pending_queue_sysadmin_only(client: TestClient, enforce: None) -> None:
+    act_as("creator1")
+    _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+    )
+    act_as("stranger")
+    assert client.get("/api/groups/pending").status_code == 403
+    act_as(SYSADMIN)
+    r = client.get("/api/groups/pending")
+    assert r.status_code == 200
+    assert all(g["status"] == "pending" for g in r.json())
+
+
+# ── decide — approve/reject/double/non-sysadmin ───────────────
+
+
+def test_decide_approve_activates(client: TestClient, enforce: None) -> None:
+    act_as("creator1")
+    g = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+    ).json()
+    act_as(SYSADMIN)
+    r = client.post(f"/api/groups/{g['id']}/decide", json={"decision": "approve"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "active"
+    assert body["approved_by"] == SYSADMIN
+    assert body["approved_at"] is not None
+
+
+def test_decide_reject(client: TestClient, enforce: None) -> None:
+    act_as("creator1")
+    g = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+    ).json()
+    act_as(SYSADMIN)
+    r = client.post(f"/api/groups/{g['id']}/decide", json={"decision": "reject"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "rejected"
+
+
+def test_decide_non_sysadmin_403(client: TestClient, enforce: None) -> None:
+    act_as("creator1")
+    g = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+    ).json()
+    act_as("creator1")
+    assert (
+        client.post(
+            f"/api/groups/{g['id']}/decide", json={"decision": "approve"}
+        ).status_code
+        == 403
+    )
+
+
+def test_decide_double_409(client: TestClient, enforce: None) -> None:
+    act_as("creator1")
+    g = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+    ).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "approve"})
+    r = client.post(f"/api/groups/{g['id']}/decide", json={"decision": "reject"})
+    assert r.status_code == 409
+
+
+# ── members — manager/sysadmin gate, active-only ──────────────
+
+
+def _create_and_activate(client: TestClient, creator: str = "creator1") -> dict:
+    act_as(creator)
+    g = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+    ).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "approve"})
+    return g
+
+
+def test_add_member_by_manager_200(client: TestClient, enforce: None) -> None:
+    g = _create_and_activate(client)
+    act_as("creator1")  # creator is auto-manager
+    r = client.post(
+        f"/api/groups/{g['id']}/members",
+        json={"member_type": "user", "member_id": "u.new"},
+    )
+    assert r.status_code == 201
+    assert any(m["member_id"] == "u.new" for m in r.json()["members"])
+
+
+def test_add_member_non_manager_403(client: TestClient, enforce: None) -> None:
+    g = _create_and_activate(client)
+    act_as("stranger")
+    r = client.post(
+        f"/api/groups/{g['id']}/members",
+        json={"member_type": "user", "member_id": "u.new"},
+    )
+    assert r.status_code == 403
+
+
+def test_add_member_pending_group_409(client: TestClient, enforce: None) -> None:
+    act_as("creator1")
+    g = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+    ).json()
+    act_as("creator1")  # manager, but group still pending
+    r = client.post(
+        f"/api/groups/{g['id']}/members",
+        json={"member_type": "user", "member_id": "u.new"},
+    )
+    assert r.status_code == 409
+
+
+def test_add_member_duplicate_409(client: TestClient, enforce: None) -> None:
+    g = _create_and_activate(client)
+    act_as("creator1")
+    r = client.post(
+        f"/api/groups/{g['id']}/members",
+        json={"member_type": "user", "member_id": "u.a"},
+    )
+    assert r.status_code == 409
+
+
+def test_remove_member_by_manager(client: TestClient, enforce: None) -> None:
+    g = _create_and_activate(client)
+    act_as("creator1")
+    detail = client.get(f"/api/groups/{g['id']}").json()
+    member_pk = detail["members"][0]["id"]
+    r = client.delete(f"/api/groups/{g['id']}/members/{member_pk}")
+    assert r.status_code == 200
+    assert all(m["id"] != member_pk for m in r.json()["members"])
+
+
+# ── managers — set replace, ≥1 ────────────────────────────────
+
+
+def test_set_managers_replace(client: TestClient, enforce: None) -> None:
+    g = _create_and_activate(client)
+    act_as("creator1")
+    r = client.put(
+        f"/api/groups/{g['id']}/managers", json={"managers": ["m1", "m2"]}
+    )
+    assert r.status_code == 200
+    assert set(r.json()["managers"]) == {"m1", "m2"}
+
+
+def test_set_managers_empty_422(client: TestClient, enforce: None) -> None:
+    g = _create_and_activate(client)
+    act_as("creator1")
+    r = client.put(f"/api/groups/{g['id']}/managers", json={"managers": []})
+    assert r.status_code == 422
+
+
+# ── end-to-end judgment: approved group grant → member gets role ──
+
+
+def test_end_to_end_group_grant_gives_role(
+    client: TestClient, enforce: None
+) -> None:
+    """create(≥2 members incl user) → approve → grant group editor on a map →
+    user-member gets editor; a PENDING group grant gives NO role."""
+    seed_employee("u.member", ("Div", "Office", "Team"))
+
+    # 1. 그룹 생성(2 멤버, u.member 포함) → sysadmin approve
+    act_as("creator1")
+    g = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.member"},
+            {"member_type": "user", "member_id": "u.other"},
+        ],
+    ).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "approve"})
+
+    # 2. 맵에 그 그룹 editor grant (sysadmin = owner라 게이트 통과)
+    map_id = seed_map()
+    r = client.post(
+        f"/api/maps/{map_id}/permissions",
+        json={
+            "principal_type": "group",
+            "principal_id": str(g["id"]),
+            "role": "editor",
+        },
+    )
+    assert r.status_code == 201
+
+    # 3. u.member 는 active 그룹 멤버 → effective_role editor
+    assert effective_role_of(map_id, "u.member") == "editor"
+
+    # ── pending 그룹의 grant 는 역할 부여 안 함 ──
+    act_as("creator2")
+    gp = _create_group(
+        client,
+        name="pending-grp",
+        members=[
+            {"member_type": "user", "member_id": "u.member"},
+            {"member_type": "user", "member_id": "u.other2"},
+        ],
+    ).json()
+    # 승인하지 않음 — pending 유지
+    map2 = seed_map()
+    act_as(SYSADMIN)
+    r = client.post(
+        f"/api/maps/{map2}/permissions",
+        json={
+            "principal_type": "group",
+            "principal_id": str(gp["id"]),
+            "role": "editor",
+        },
+    )
+    assert r.status_code == 201
+    assert effective_role_of(map2, "u.member") is None  # pending → 무역할
+
+
+# ── AUTH-OFF 비회귀 (everyone sysadmin) ───────────────────────
+
+
+def test_auth_off_group_create_and_approve(client: TestClient) -> None:
+    r = client.post(
+        "/api/groups",
+        json={
+            "name": "off grp",
+            "members": [
+                {"member_type": "user", "member_id": "u.a"},
+                {"member_type": "user", "member_id": "u.b"},
+            ],
+        },
+    )
+    assert r.status_code == 201
+    gid = r.json()["id"]
+    # AUTH OFF → 전원 sysadmin → pending queue·decide 개방
+    assert client.get("/api/groups/pending").status_code == 200
+    assert (
+        client.post(f"/api/groups/{gid}/decide", json={"decision": "approve"}).status_code
+        == 200
+    )
+
+
+# ── G. 소프트삭제 · 재신청 · 자동 퍼지 (2026-06-27) ──────────────
+
+
+def _two_user_members() -> list[dict]:
+    return [
+        {"member_type": "user", "member_id": "u.a"},
+        {"member_type": "user", "member_id": "u.b"},
+    ]
+
+
+def test_delete_inactive_group_soft_hides(client: TestClient, enforce: None) -> None:
+    """비활성 그룹 삭제 → 소프트삭제(deleted_at 설정, 목록에서 숨김). active는 먼저 비활성 필요."""
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "approve"})
+    act_as("creator1")
+    client.post(f"/api/groups/{g['id']}/deactivate")  # active → inactive (삭제 전 단계)
+    r = client.delete(f"/api/groups/{g['id']}")
+    assert r.status_code == 200
+    assert r.json()["deleted_at"] is not None
+    assert g["id"] not in {x["id"] for x in client.get("/api/groups").json()}
+
+
+def test_reject_then_resubmit(client: TestClient, enforce: None) -> None:
+    """거절 → 목록에 rejected로 노출(유예) → 재신청 → pending(deleted_at 해제)."""
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "reject"})
+    act_as("creator1")
+    listed = {x["id"]: x for x in client.get("/api/groups").json()}
+    assert g["id"] in listed and listed[g["id"]]["status"] == "rejected"
+    body = client.post(f"/api/groups/{g['id']}/resubmit").json()
+    assert body["status"] == "pending" and body["deleted_at"] is None
+
+
+def test_delete_rejected_group_removes(client: TestClient, enforce: None) -> None:
+    """거절된 그룹 삭제 → 즉시 영구 제거(404)."""
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "reject"})
+    act_as("creator1")
+    assert client.delete(f"/api/groups/{g['id']}").status_code == 200
+    assert client.get(f"/api/groups/{g['id']}").status_code == 404
+
+
+def _set_group_deleted(group_id: int, dt: object) -> None:
+    async def _set(session: object) -> None:
+        grp = await session.get(UserGroup, group_id)
+        grp.deleted_at = dt
+
+    _seed(_set)
+
+
+def test_purge_expired_groups(client: TestClient, enforce: None) -> None:
+    """deleted_at이 보존기간(7일) 지난 그룹은 목록 조회 시 영구 삭제."""
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    _set_group_deleted(g["id"], _now() - timedelta(days=8))
+    act_as("creator1")
+    client.get("/api/groups")  # lazy purge 트리거
+    assert client.get(f"/api/groups/{g['id']}").status_code == 404
+
+
+def test_create_group_duplicate_name_409(client: TestClient, enforce: None) -> None:
+    """그룹 이름 전역 중복 금지 — name-available=false + 중복 생성 409."""
+    act_as("creator1")
+    _create_group(client, name="Dup Name", members=_two_user_members())
+    avail = client.get("/api/groups/name-available", params={"name": "Dup Name"})
+    assert avail.status_code == 200 and avail.json()["available"] is False
+    r = _create_group(client, name="Dup Name", members=_two_user_members())
+    assert r.status_code == 409
+    fresh = client.get("/api/groups/name-available", params={"name": "Totally New Name"})
+    assert fresh.json()["available"] is True
+
+
+# ── H. 라이프사이클 — withdraw · deactivate/reactivate · rename (2026-06-27) ──
+
+
+def _make_active(client: TestClient, creator: str = "creator1") -> dict:
+    act_as(creator)
+    g = _create_group(client, members=_two_user_members()).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "approve"})
+    return g
+
+
+def test_withdraw_pending_removes(client: TestClient, enforce: None) -> None:
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    r = client.post(f"/api/groups/{g['id']}/withdraw")
+    assert r.status_code == 200 and r.json()["withdrawn"] is True
+    act_as(SYSADMIN)
+    assert client.get(f"/api/groups/{g['id']}").status_code == 404
+
+
+def test_withdraw_non_pending_409(client: TestClient, enforce: None) -> None:
+    g = _make_active(client)
+    act_as("creator1")
+    assert client.post(f"/api/groups/{g['id']}/withdraw").status_code == 409
+
+
+def test_delete_active_requires_deactivate(client: TestClient, enforce: None) -> None:
+    g = _make_active(client)
+    act_as("creator1")
+    assert client.delete(f"/api/groups/{g['id']}").status_code == 409
+    assert client.post(f"/api/groups/{g['id']}/deactivate").json()["status"] == "inactive"
+    assert client.delete(f"/api/groups/{g['id']}").status_code == 200
+    assert g["id"] not in {x["id"] for x in client.get("/api/groups").json()}
+
+
+def test_deactivate_reactivate_cycle(client: TestClient, enforce: None) -> None:
+    g = _make_active(client)
+    act_as("creator1")
+    assert client.post(f"/api/groups/{g['id']}/deactivate").json()["status"] == "inactive"
+    assert client.post(f"/api/groups/{g['id']}/reactivate").json()["status"] == "active"
+    assert client.post(f"/api/groups/{g['id']}/reactivate").status_code == 409
+
+
+def test_rename_active_weekly_limit(client: TestClient, enforce: None) -> None:
+    g = _make_active(client)
+    act_as("creator1")
+    r = client.patch(f"/api/groups/{g['id']}/name", json={"name": "Renamed Lifecycle"})
+    assert r.status_code == 200 and r.json()["name"] == "Renamed Lifecycle"
+    assert (
+        client.patch(
+            f"/api/groups/{g['id']}/name", json={"name": "Renamed Again"}
+        ).status_code
+        == 409
+    )
+
+
+def test_rename_duplicate_and_non_active_409(client: TestClient, enforce: None) -> None:
+    g1 = _make_active(client, creator="c1")
+    g2 = _make_active(client, creator="c2")
+    act_as("c1")
+    assert (
+        client.patch(f"/api/groups/{g1['id']}/name", json={"name": g2["name"]}).status_code
+        == 409
+    )
+    act_as("creator1")
+    pend = _create_group(client, members=_two_user_members()).json()
+    assert client.patch(f"/api/groups/{pend['id']}/name", json={"name": "X"}).status_code == 409
+
+
+# ── I. 스케줄드 딜리션(휴지통) — 목록 + 복구 (L5, 2026-06-28) ──
+
+
+def test_deleted_group_in_trash_and_restore(client: TestClient, enforce: None) -> None:
+    """inactive 그룹 삭제 → 메인 목록에서 사라지고 휴지통에 노출 → 복구 시 inactive로 복귀."""
+    g = _make_active(client)
+    act_as("creator1")
+    client.post(f"/api/groups/{g['id']}/deactivate")
+    client.delete(f"/api/groups/{g['id']}")
+    # 메인 목록에서 제외
+    assert g["id"] not in {x["id"] for x in client.get("/api/groups").json()}
+    # 휴지통에 노출
+    trash = client.get("/api/groups/deleted").json()
+    assert g["id"] in {x["id"] for x in trash}
+    # 복구 → inactive 로 메인 목록 복귀, 휴지통에서 사라짐
+    restored = client.post(f"/api/groups/{g['id']}/restore").json()
+    assert restored["status"] == "inactive" and restored["deleted_at"] is None
+    assert g["id"] in {x["id"] for x in client.get("/api/groups").json()}
+    assert g["id"] not in {x["id"] for x in client.get("/api/groups/deleted").json()}
+
+
+def test_rejected_not_in_trash(client: TestClient, enforce: None) -> None:
+    """거절 그룹은 deleted_at이 있어도 휴지통이 아닌 메인 목록(유예)에 남는다."""
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "reject"})
+    assert g["id"] not in {x["id"] for x in client.get("/api/groups/deleted").json()}
+
+
+def test_restore_non_deleted_409(client: TestClient, enforce: None) -> None:
+    g = _make_active(client)
+    act_as("creator1")
+    assert client.post(f"/api/groups/{g['id']}/restore").status_code == 409
+
+
+def test_deactivate_removes_group_map_permissions(client: TestClient, enforce: None) -> None:
+    """그룹 비활성 시 그 그룹에 부여된 map_permissions 행이 삭제된다(잔존 방지)."""
+    from app.models import MapPermission
+
+    g = _make_active(client)
+    map_id = seed_map()
+
+    async def _grant(session) -> None:
+        session.add(
+            MapPermission(
+                map_id=map_id,
+                principal_type="group",
+                principal_id=str(g["id"]),
+                role="viewer",
+                granted_by=SYSADMIN,
+            )
+        )
+
+    _seed(_grant)
+
+    async def _count(session) -> int:
+        rows = await session.scalars(
+            select(MapPermission).where(
+                MapPermission.principal_type == "group",
+                MapPermission.principal_id == str(g["id"]),
+            )
+        )
+        return len(rows.all())
+
+    assert _seed(_count) == 1
+    act_as("creator1")
+    assert client.post(f"/api/groups/{g['id']}/deactivate").json()["status"] == "inactive"
+    assert _seed(_count) == 0  # 비활성 시 권한 삭제됨

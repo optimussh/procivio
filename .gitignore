@@ -1,0 +1,38 @@
+# Claude Code
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Env / Secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local sqlite DB (로컬 네이티브 개발용 — 서버는 postgres). dev.db도 추적 제외(시드로 재생성).
+*.db
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+.next/
+.turbo/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Tooling caches (superpowers brainstorm 등 — 프로젝트 코드 아님)
+.superpowers/
