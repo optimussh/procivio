@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -15,9 +16,10 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // monorepo: frontend/ is the app root (avoid picking repo package-lock.json)
+  // frontend/ 가 앱 루트. 상위 빈 package-lock.json 이 있으면 Next 16 Turbopack이
+  // monorepo root를 잘못 잡아 TCP listen 만 하고 HTTP 응답이 안 나오는 행이 재현됨.
   turbopack: {
-    root: process.cwd(),
+    root: path.resolve(process.cwd()),
   },
 };
 
