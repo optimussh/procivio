@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — Architecture ontology O1–O3 (feat/architecture-ontology-o1-o3)
+- 스펙(한글): `docs/superpowers/specs/2026-07-11-architecture-ontology-o1-o3-design.md`
+- O1 `GET /structure/gaps` — 트리↔CA 갭 리포트
+- O2 concepts CRUD + `maps/{id}/concept` 부착
+- O3 고정 6관계 + callers/architecture API; Structure 탭 UI
+- pytest `test_architecture` 4종
+
 ## 2026-07-11 — P2/P3/P4 discovery (feat/p2-p3-p4-discovery)
 - P2 As-Is/To-Be — `variant=pair|as_is|to_be` on from-transcript; AI panel dual generate + Apply To-Be
 - P3 interview collect — campaigns/token public form `/interview/[token]`, synthesize → transcript

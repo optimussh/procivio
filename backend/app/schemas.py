@@ -481,6 +481,8 @@ class MapOut(BaseModel):
     parent_map_id: int | None = None
     # 템플릿 갤러리 노출 여부 (Phase B)
     is_template: bool = False
+    # O2 개념 사전 부착
+    concept_id: int | None = None
 
 
 class MapDetailOut(MapOut):

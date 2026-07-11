@@ -236,6 +236,101 @@ export function getStructureTree(): Promise<{
   );
 }
 
+// ── Architecture ontology O1–O3 ───────────────────────────
+
+export interface StructureGapIssue {
+  kind: string;
+  severity: string;
+  map_id: number | null;
+  map_name: string;
+  related_map_id?: number | null;
+  related_map_name?: string | null;
+  message: string;
+}
+
+export function getStructureGaps(): Promise<{
+  issues: StructureGapIssue[];
+  map_count: number;
+  issue_count: number;
+}> {
+  return request("/structure/gaps");
+}
+
+export interface ArchitectureConcept {
+  id: number;
+  name: string;
+  aliases: string[];
+  workflow_level: number | null;
+  description: string;
+  created_by: string;
+  status: string;
+  map_count: number;
+}
+
+export function listConcepts(): Promise<ArchitectureConcept[]> {
+  return request("/concepts");
+}
+
+export function createConcept(body: {
+  name: string;
+  aliases?: string[];
+  workflow_level?: number | null;
+  description?: string;
+}): Promise<ArchitectureConcept> {
+  return request("/concepts", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function attachMapConcept(
+  mapId: number,
+  conceptId: number | null,
+): Promise<ArchitectureConcept | null> {
+  return request(`/maps/${mapId}/concept`, {
+    method: "POST",
+    body: JSON.stringify({ concept_id: conceptId }),
+  });
+}
+
+export interface ArchitectureRelation {
+  id: number;
+  relation_type: string;
+  source_map_id: number | null;
+  target_map_id: number | null;
+  source_concept_id: number | null;
+  target_concept_id: number | null;
+  note: string;
+  created_by: string;
+  derived?: boolean;
+}
+
+export function listArchitectureRelations(mapId?: number): Promise<ArchitectureRelation[]> {
+  const q = mapId != null ? `?map_id=${mapId}` : "";
+  return request(`/architecture/relations${q}`);
+}
+
+export function createArchitectureRelation(body: {
+  relation_type: string;
+  source_map_id?: number | null;
+  target_map_id?: number | null;
+  source_concept_id?: number | null;
+  target_concept_id?: number | null;
+  note?: string;
+}): Promise<ArchitectureRelation> {
+  return request("/architecture/relations", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteArchitectureRelation(id: number): Promise<{ ok: boolean }> {
+  return request(`/architecture/relations/${id}`, { method: "DELETE" });
+}
+
+export function getMapCallers(mapId: number): Promise<
+  { map_id: number; map_name: string; version_id: number; node_id: string; node_title: string }[]
+> {
+  return request(`/maps/${mapId}/callers`);
+}
+
 export function updateMap(
   mapId: number,
   patch: {

@@ -97,6 +97,10 @@ class ProcessMap(Base):
     )
     # 템플릿 맵 — True면 홈 템플릿 갤러리에서 인스턴스화 가능 (Phase B)
     is_template: Mapped[bool] = mapped_column(Boolean, default=False)
+    # O2 개념 사전 부착 — 맵이 공유하는 업무 개념 id (architecture ontology)
+    concept_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("concepts.id", ondelete="SET NULL"), default=None, index=True
+    )
     # ── 서브프로세스 지정(designation) — 지정된 맵만 라이브러리 피커 노출 (spec 2026-07-06) ──
     # NULL=미지정. 값 있으면 지정 시각(플래그 겸용, KST).
     sp_designated_at: Mapped[datetime | None] = mapped_column(
@@ -613,4 +617,60 @@ class InterviewResponse(Base):
     respondent_name: Mapped[str] = mapped_column(String(200), default="")
     # {question_id: answer_text}
     answers: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Concept(Base):
+    """O2 개념 사전 — 맵과 분리된 공유 업무 정체성 (capability/process 이름 등)."""
+
+    __tablename__ = "concepts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    # 별칭 목록 JSON: ["PO 등록", "Purchase order entry"]
+    aliases: Mapped[list] = mapped_column(JSON, default=list)
+    # 선택 레벨 힌트 1..5 — NULL=미지정
+    workflow_level: Mapped[int | None] = mapped_column(Integer, default=None)
+    description: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # active | archived
+    status: Mapped[str] = mapped_column(String(20), default="active")
+
+
+class ArchitectureRelation(Base):
+    """O3 고정 관계 타입 — contains|realizes|calls|variant_of|uses|owned_by.
+
+    트리(parent_map_id)·Call(linked_map_id) SoR는 유지. 이 테이블은 명시 관계 보강용.
+    source/target 는 각각 map 또는 concept 중 정확히 하나.
+    """
+
+    __tablename__ = "architecture_relations"
+    __table_args__ = (
+        Index(
+            "ix_arch_rel_type_src_tgt",
+            "relation_type",
+            "source_map_id",
+            "target_map_id",
+            "source_concept_id",
+            "target_concept_id",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    relation_type: Mapped[str] = mapped_column(String(30), index=True)
+    source_map_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("process_maps.id", ondelete="CASCADE"), default=None
+    )
+    target_map_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("process_maps.id", ondelete="CASCADE"), default=None
+    )
+    source_concept_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("concepts.id", ondelete="CASCADE"), default=None
+    )
+    target_concept_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("concepts.id", ondelete="CASCADE"), default=None
+    )
+    note: Mapped[str] = mapped_column(String(500), default="")
+    created_by: Mapped[str] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

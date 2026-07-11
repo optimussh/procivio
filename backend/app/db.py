@@ -60,6 +60,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "performer_type", "VARCHAR(20) DEFAULT ''"),
     # 템플릿 맵 플래그 (Phase B)
     ("process_maps", "is_template", "BOOLEAN DEFAULT 0"),
+    # O2 concept attach
+    ("process_maps", "concept_id", "INTEGER"),
 ]
 
 

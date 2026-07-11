@@ -17,6 +17,7 @@ from app.routers import (
     ai,
     ai_sessions,
     app_settings,
+    architecture,
     embed,
     approvers,
     checkout,
@@ -64,6 +65,7 @@ app.include_router(app_settings.router)
 app.include_router(embed.router)
 app.include_router(maps.router)
 app.include_router(structure.router)  # /api/structure — before maps/{id} collision risk
+app.include_router(architecture.router)  # O1 gaps · O2 concepts · O3 relations
 app.include_router(versions.router)
 app.include_router(checkout.router)
 app.include_router(graph.router)
