@@ -216,12 +216,24 @@ export interface StructureMapNode {
   name: string;
   workflow_level: number;
   parent_map_id: number | null;
+  /** Catalog industry tag (not a workflow level) */
+  industry?: string | null;
   children: StructureMapNode[];
 }
 
-export function getStructureTree(): Promise<{ roots: StructureMapNode[] }> {
+export interface StructureIndustryGroup {
+  name: string;
+  roots: StructureMapNode[];
+}
+
+export function getStructureTree(): Promise<{
+  roots: StructureMapNode[];
+  industries: StructureIndustryGroup[];
+}> {
   // /api/structure — not /maps/structure (would be captured by /maps/{map_id} as string "structure")
-  return request<{ roots: StructureMapNode[] }>("/structure");
+  return request<{ roots: StructureMapNode[]; industries: StructureIndustryGroup[] }>(
+    "/structure",
+  );
 }
 
 export function updateMap(
@@ -1570,6 +1582,31 @@ export function aiChat(
       inquire_mode: options?.inquireMode ?? false,
       inquire_step: options?.inquireStep ?? null,
       inquire_answers: options?.inquireAnswers ?? {},
+    }),
+  });
+}
+
+/** 회의록·인터뷰 전문 → kind=graph 초안 (design 2026-07-11) */
+export interface AiTranscriptBody {
+  transcript: string;
+  focus?: string;
+  industry_hint?: string;
+  session_id?: number | null;
+  model?: string | null;
+}
+
+export function aiFromTranscript(
+  versionId: number,
+  body: AiTranscriptBody,
+): Promise<AiProposal> {
+  return request<AiProposal>(`/versions/${versionId}/ai/from-transcript`, {
+    method: "POST",
+    body: JSON.stringify({
+      transcript: body.transcript,
+      focus: body.focus ?? "",
+      industry_hint: body.industry_hint ?? "",
+      session_id: body.session_id ?? null,
+      model: body.model ?? null,
     }),
   });
 }

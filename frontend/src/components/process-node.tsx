@@ -157,7 +157,7 @@ const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
   decision: "#c7a062", // amber
   start: "#84a07c", // sage
   end: "#c2849a", // rose
-  subprocess: "#7c6adc", // violet
+  subprocess: "#0066cc", // Action Blue (Call Activity — system fixed)
 };
 
 // data.color 우선, 없으면 타입별 기본 stroke — 미니맵 등에서 실제 노드 색 재사용.
@@ -411,15 +411,19 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   const diffFields = data.diffFields ?? [];
 
   if (data.nodeType === "subprocess") {
+    const canDrill = !data.locked && !data.undesignated;
     return (
       <div
         className="group bpm-node-emph relative flex w-[180px] min-h-[64px] items-center gap-2 rounded-sm px-3 py-2 text-sm transition-all duration-150"
         style={style}
-        title={data.diffNote}
+        title={
+          data.diffNote ||
+          (canDrill ? t("subprocess.drillHint") : data.undesignated ? t("subprocess.undesignated") : data.locked ? t("subprocess.locked") : undefined)
+        }
       >
         {diff && <DiffBadge status={diff} />}
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
-        <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
+        <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
         <div className="min-w-0 flex-1">
           <div className="font-medium text-ink">
             {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
@@ -427,6 +431,11 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
           </div>
           {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
           <NodeFields data={data} />
+          {canDrill && (
+            <div className="mt-0.5 text-[10px] font-medium leading-tight text-accent opacity-80 group-hover:opacity-100">
+              {t("subprocess.drillHintShort")}
+            </div>
+          )}
           {data.updateAvailable && (
             <div className="mt-0.5 flex items-center gap-1 text-xs text-accent" title={t("subprocess.updateAvailable")}>
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />

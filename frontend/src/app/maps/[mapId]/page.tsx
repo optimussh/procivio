@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, Group, Hand, Hourglass, Info, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, Workflow, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -35,6 +35,7 @@ import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card"
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
+import { DrillBreadcrumb } from "@/components/drill-breadcrumb";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
@@ -701,6 +702,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  // process→subprocess 링크 단축: 선택된 노드에 라이브러리 맵 바인딩
+  const [linkBindNodeId, setLinkBindNodeId] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(360);
@@ -3652,6 +3655,54 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, reactFlow, setNodes, scheduleAutoSave],
   );
 
+  // 일반 process 노드 → Call Activity(subprocess)로 변환 (라이브러리 pick)
+  const bindProcessToSubprocessMap = useCallback(
+    async (nodeId: string, linkedMapId: number, name: string) => {
+      if (readOnly) return;
+      let subEnds: SubEnd[] = [];
+      try {
+        const resolved = await getResolvedGraph(linkedMapId, true, null);
+        subEnds = deriveSubEnds(resolved);
+      } catch {
+        // empty subEnds ok
+      }
+      setNodes((cur) =>
+        cur.map((n) => {
+          if (n.id !== nodeId) return n;
+          if (n.data.nodeType !== "process") return n;
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              label: name,
+              nodeType: "subprocess" as const,
+              color: "",
+              linkedMapId,
+              linkedVersionId: null,
+              followLatest: true,
+              subEnds,
+            },
+          };
+        }),
+      );
+      scheduleAutoSave();
+      showToast(t("subprocess.linkedToMap", { name }));
+      setLinkBindNodeId(null);
+      setLibraryOpen(false);
+    },
+    [readOnly, setNodes, scheduleAutoSave, showToast, t],
+  );
+
+  const startLinkSubprocess = useCallback(
+    (nodeId: string) => {
+      if (readOnly) return;
+      setSelectedId(nodeId);
+      setLinkBindNodeId(nodeId);
+      setLibraryOpen(true);
+    },
+    [readOnly],
+  );
+
   // 상단 맵 드롭다운의 '링크노드로 추가' — 다른 맵을 현재 캔버스에 읽기전용 참조(subprocess) 노드로 삽입.
   // handleLibraryDrop과 동일한 노드 형태이되 드롭 좌표 대신 뷰포트 중앙, 최신본 추종(followLatest).
   const addLinkNodeFromMap = useCallback(
@@ -4626,6 +4677,40 @@ function MapEditor({ mapId }: { mapId: number }) {
               },
             },
           ];
+      // Call Activity 드릴인 (더블클릭과 동일)
+      const drillItems: ContextMenuItem[] =
+        menuNodeType === "subprocess" &&
+        targetNode?.data.linkedMapId != null &&
+        !targetNode.data.locked &&
+        !targetNode.data.undesignated
+          ? [
+              {
+                label: t("node.action.drill"),
+                icon: Workflow,
+                shortcut: t("ctx.doubleClick"),
+                onSelect: () => {
+                  if (menu.targetId) {
+                    drillIntoSubprocess(menu.targetId);
+                  }
+                },
+              },
+            ]
+          : [];
+      // 일반 process → 지정 맵 링크 (Call Activity 정식 경로)
+      const linkSubItems: ContextMenuItem[] =
+        !readOnly && menuNodeType === "process"
+          ? [
+              {
+                label: t("node.action.linkSubprocess"),
+                icon: Link2,
+                onSelect: () => {
+                  if (menu.targetId) {
+                    startLinkSubprocess(menu.targetId);
+                  }
+                },
+              },
+            ]
+          : [];
       return [
         // 노드 우클릭 기본 = 정보 수정 모달(보기+편집)
         {
@@ -4639,6 +4724,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             }
           },
         },
+        ...drillItems,
+        ...linkSubItems,
         ...renameItems,
         { divider: true },
         ...colorItems,
@@ -4684,6 +4771,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     recolorGroup,
     applyAutoLayout,
     reactFlow,
+    drillIntoSubprocess,
+    startLinkSubprocess,
     t,
   ]);
 
@@ -6363,6 +6452,18 @@ function MapEditor({ mapId }: { mapId: number }) {
           onToRoot={() => void navigateTo(scopes.slice(0, 1))}
           onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
         />
+        {scopes.length > 1 && (
+          <>
+            <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+            <DrillBreadcrumb
+              crumbs={scopes.map((s, i) => ({
+                title: i === 0 ? mapName || s.title : s.title,
+                depth: i + 1,
+              }))}
+              onNavigate={(depth) => void navigateTo(scopes.slice(0, depth))}
+            />
+          </>
+        )}
         <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
         <VersionPill
           versions={versions}
@@ -6600,7 +6701,26 @@ function MapEditor({ mapId }: { mapId: number }) {
         {libraryOpen && (
           <ProcessLibraryPanel
             currentMapId={mapId}
-            onClose={() => setLibraryOpen(false)}
+            onClose={() => {
+              setLibraryOpen(false);
+              setLinkBindNodeId(null);
+            }}
+            pickMode={linkBindNodeId != null}
+            pickHint={
+              linkBindNodeId
+                ? t("library.pickHintForNode", {
+                    name:
+                      nodes.find((n) => n.id === linkBindNodeId)?.data.label ?? "",
+                  })
+                : undefined
+            }
+            onPick={
+              linkBindNodeId
+                ? (linkedMapId, name) => {
+                    void bindProcessToSubprocessMap(linkBindNodeId, linkedMapId, name);
+                  }
+                : undefined
+            }
           />
         )}
         <div
@@ -6702,9 +6822,28 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(null);
                       }}
                       onNodeDoubleClick={(_, node) => {
-                        // 더블클릭 = 요약/편집 모달 — subprocess 포함(딥뷰 드릴인 대신, 프레임 변동 제거 F4).
-                        // 드릴인은 임베드 자식 더블클릭·펼침 토글 경로로 유지. 타이틀 더블클릭은 이름 편집(비-subprocess).
+                        // subprocess(Call Activity) = 드릴인(큰 판 → 상세). 그 외 = 요약 모달.
+                        // 타이틀 더블클릭 이름 편집은 NodeTitle 경로(비-subprocess).
                         setSelectedId(node.id);
+                        const data = node.data as NodeData | undefined;
+                        if (
+                          data?.nodeType === "subprocess" &&
+                          data.linkedMapId != null &&
+                          !data.locked &&
+                          !data.undesignated &&
+                          data.scopeId == null
+                        ) {
+                          const host = fullGraphRef.current?.nodes.find((n) => n.id === node.id);
+                          const rendered = reactFlow.getNode(node.id)?.position;
+                          if (host && rendered) {
+                            focusCamRef.current = {
+                              shift: { x: rendered.x - host.pos_x, y: rendered.y - host.pos_y },
+                              vp: reactFlow.getViewport(),
+                            };
+                          }
+                          drillIntoSubprocess(node.id);
+                          return;
+                        }
                         setSummaryNodeId(node.id);
                       }}
                       onEdgeClick={(_, edge) => {
@@ -6829,6 +6968,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                           readOnly={readOnly}
                           onLeaveGroups={leaveGroups}
                           onOpenLink={setLinkPreviewUrl}
+                          onDrillIn={(id) => {
+                            const host = fullGraphRef.current?.nodes.find((n) => n.id === id);
+                            const rendered = reactFlow.getNode(id)?.position;
+                            if (host && rendered) {
+                              focusCamRef.current = {
+                                shift: { x: rendered.x - host.pos_x, y: rendered.y - host.pos_y },
+                                vp: reactFlow.getViewport(),
+                              };
+                            }
+                            drillIntoSubprocess(id);
+                          }}
+                          onLinkSubprocess={startLinkSubprocess}
                         />
                         {inlineComposition && (
                           <InlineRegionBands

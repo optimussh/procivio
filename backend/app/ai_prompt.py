@@ -353,9 +353,11 @@ def build_inquire_generate_messages(
     user = (
         f"{answers_block}\n\n"
         "위 인터뷰를 바탕으로 프로세스맵 전체를 kind=graph JSON 한 개로 작성하세요. "
-        "start → process/decision들 → end 흐름을 만들고, "
-        "actors는 attributes.department 또는 그룹 라벨에 반영하세요. "
-        "branches가 있으면 decision 노드와 라벨 있는 edge로 표현하세요."
+        "start 1개 → process/decision들 → end 1개 이상 흐름을 만들고, "
+        "actors는 답변에 있을 때만 attributes.department 또는 그룹 라벨에 반영하세요 "
+        "(없으면 빈 문자열). "
+        "branches가 있으면 decision 노드와 라벨 있는 edge로 표현하세요. "
+        "담당자/부서는 답변에 명시된 경우만 설정하세요."
     )
     return [
         {
@@ -364,3 +366,48 @@ def build_inquire_generate_messages(
         },
         {"role": "user", "content": user},
     ]
+
+
+# 트랜스크립트 산업 힌트 — 시드 트리 전체가 아니라 짧은 어휘만 (design 2026-07-11)
+_INDUSTRY_HINTS: dict[str, str] = {
+    "antibody": "도메인 힌트: 항체 의약품(mAb) — 영업·세포배양·정제·구매·생산계획·자재.",
+    "semiconductor": (
+        "도메인 힌트: 메모리 반도체 FAB — 사진(coat/expose/develop/CD), "
+        "식각, 확산, 박막, Probe, 테스트."
+    ),
+    "battery": "도메인 힌트: 이차전지 — 전극 코팅, 셀 조립, 포메이션, 모듈·팩.",
+}
+
+
+def build_transcript_generate_messages(
+    *,
+    manual: str,
+    current_graph: GraphOut,
+    can_edit: bool,
+    transcript: str,
+    focus: str = "",
+    industry_hint: str = "",
+) -> list[dict]:
+    """회의록·인터뷰 전문 → kind=graph 전용 메시지 (design 2026-07-11)."""
+    hint_key = (industry_hint or "").strip().lower()
+    hint_line = _INDUSTRY_HINTS.get(hint_key, "")
+    if industry_hint.strip() and not hint_line and hint_key not in ("", "none"):
+        hint_line = f"도메인 힌트(사용자): {industry_hint.strip()[:200]}"
+    focus_line = f"초점: {focus.strip()}\n" if focus.strip() else ""
+    extra = f"{hint_line}\n" if hint_line else ""
+    user = (
+        "다음 인터뷰·회의 텍스트만 근거로 프로세스맵 JSON(kind=graph)을 만드세요.\n"
+        "텍스트에 없는 담당자·시스템·단계를 지어내지 마세요(명시되지 않으면 빈 문자열).\n"
+        "node_type은 start|process|decision|end 만. subprocess 노드는 만들지 마세요.\n"
+        "process 노드는 가능하면 5~15개. decision은 분기 라벨을 달으세요.\n"
+        "start 1개와 end 1개 이상을 포함하세요.\n"
+        f"{extra}{focus_line}"
+        f"--- 트랜스크립트 ---\n{transcript}\n--- 끝 ---"
+    )
+    return build_messages(
+        manual=manual,
+        current_graph=current_graph,
+        can_edit=can_edit,
+        instruction=user,
+        history=[],
+    )

@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — Interview transcript → map (P0) (feat/interview-transcript-map)
+- 설계·계획: `docs/superpowers/specs/2026-07-11-interview-transcript-map-design.md`, `plans/2026-07-11-interview-transcript-map.md`
+- API `POST /versions/{id}/ai/from-transcript` — 80~max chars, 체크아웃 필수, 원문 미저장, graph 초안 + self-repair
+- AI 패널 Transcript 모드 — 붙여넣기·산업 힌트·Generate → 기존 Import 병합 프리뷰
+- pytest `test_ai_transcript` 4종
+
 ## 2026-07-11 — Phase B: PDF · templates · level filter · legal (main)
 - B1 PDF export — 표지(메타)+맵 이미지 `exportCanvasPdf` (jspdf), 컨텍스트/인스펙터 진입점.
 - B2 Template maps — `is_template` 컬럼·`GET /maps/templates`·`POST /maps/{id}/from-template`·설정 토글·홈 피커.

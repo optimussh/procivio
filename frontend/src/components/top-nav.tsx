@@ -95,12 +95,12 @@ export function TopNav() {
   };
 
   return (
-    <nav className="flex h-10 shrink-0 items-center justify-between border-b border-hairline bg-surface px-4">
+    <nav className="flex h-11 shrink-0 items-center justify-between border-b border-hairline bg-surface-alt/90 px-4 backdrop-blur-md">
       <div className="flex items-center gap-4">
         {/* 홈 로고 = 새로고침 의미 — 저장된 홈 검색·필터를 비우고 전체 리로드(SPA 아님) */}
         <Link
           href="/"
-          className="text-body-strong text-ink"
+          className="text-body-strong tracking-tight text-ink"
           onClick={(e) => {
             e.preventDefault();
             try {
@@ -113,8 +113,8 @@ export function TopNav() {
         >
           {t("app.name")}
         </Link>
-        {/* 메인 전환 탭 — 맵/구조/공지/인박스 (회색 트랙 + 활성 pill) */}
-        <div className="inline-grid grid-cols-4 gap-1 rounded-sm bg-surface-alt p-1 text-fine">
+        {/* 메인 전환 탭 — 맵/구조/공지/인박스 (parchment 트랙 + 활성 pill) */}
+        <div className="inline-grid grid-cols-4 gap-0.5 rounded-full bg-surface-chip/40 p-0.5 text-fine">
           {NAV_TABS.map((tab, i) => {
             const active = i === tabIndex;
             const Icon = tab.Icon;
@@ -124,8 +124,10 @@ export function TopNav() {
                 href={tab.href}
                 aria-current={active ? "page" : undefined}
                 className={
-                  "inline-flex items-center justify-center gap-1 rounded-xs px-2.5 py-1 transition-colors " +
-                  (active ? "bg-surface text-accent shadow-sm" : "text-ink-secondary hover:text-ink")
+                  "inline-flex items-center justify-center gap-1 rounded-full px-2.5 py-1 transition-colors " +
+                  (active
+                    ? "bg-surface text-accent shadow-sm"
+                    : "text-ink-secondary hover:text-ink")
                 }
               >
                 <Icon size={14} strokeWidth={1.5} />
@@ -143,10 +145,10 @@ export function TopNav() {
               href="/manual"
               aria-current={pathname.startsWith("/manual") ? "page" : undefined}
               className={
-                "inline-flex rounded-sm border border-hairline p-1.5 " +
+                "inline-flex rounded-full border border-hairline p-1.5 " +
                 (pathname.startsWith("/manual")
                   ? "bg-accent-tint text-accent"
-                  : "text-ink-secondary hover:bg-surface-alt hover:text-ink")
+                  : "text-ink-secondary hover:bg-surface hover:text-ink")
               }
             >
               <BookOpen size={14} strokeWidth={1.5} />
@@ -158,7 +160,7 @@ export function TopNav() {
           <button
             type="button"
             onClick={openFeedbackPanel}
-            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-accent hover:bg-accent-tint"
+            className="inline-flex items-center gap-1 rounded-full border border-hairline px-2.5 py-1 text-fine text-accent hover:bg-accent-tint"
           >
             <MessageSquare size={14} strokeWidth={1.5} />
             {t("feedback.button")}

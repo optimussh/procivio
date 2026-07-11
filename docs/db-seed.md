@@ -24,7 +24,7 @@ cd backend
 ## reset_db가 하는 일
 
 1. **스키마 재생성** — `drop_all` + `create_all`(모든 테이블 삭제 후 재생성). 컬럼 추가 등 스키마 변경을 반영하는 유일한 경로.
-2. **종합 데모 시드** — `scripts/seed_org_demo.py`(RNG seed 고정 → 재현성). 조직도 + 직원 ~400 + 그룹 6 + 맵 12(버전 워크플로)를 한 번에 채운다.
+2. **종합 데모 시드** — `scripts/seed_org_demo.py`(RNG seed 고정 → 재현성). 조직도 + 직원 ~400 + 그룹 6 + **항체 의약품 L1–L4 프로세스맵**(버전 워크플로)을 한 번에 채운다.
 
 > **`create_all`은 기존 테이블 컬럼을 ALTER하지 않는다** — 모델에 컬럼 추가 시 기존 DB엔 미반영. `reset_db`(drop 포함)나 `app/db.py`의 `_add_missing_columns` 스톱갭으로 보강. 마이그레이션(Alembic)은 후속.
 
@@ -36,7 +36,17 @@ cd backend
 
 **그룹 6** — 유저 구성 2 · 파트 구성 2(파트 org_path를 `department` 멤버로) · 혼합 2(유저+파트).
 
-**맵 12** — 종류·공개범위 다양(공개 6 / 비공개 6). 각 맵: 오너 + 편집자·뷰어 권한(유저·부서·그룹 혼합), 승인자 1~3명. 버전은 **v1~v5 게시**(정상 워크플로: 생성→제출→승인→게시, v1~4 만료·v5 현재 게시) + 최상위 작업본(대부분 draft, 일부 rejected). 일부 버전 이력에 **반려·회수** 케이스 삽입.
+**맵 ~267 (산업군 카탈로그 × L1–L5)** — 산업군은 **워크플로 레벨이 아님**. description 첫 줄 `industry:<라벨>` + Structure `industries` 섹션으로 묶음.
+
+| 산업군 (카탈로그) | 깊이 | 비고 |
+|-------------------|------|------|
+| Antibody Therapeutics / 항체 의약품 | L1–L4 | 영업·생산·구매·계획·자재 |
+| **Memory Semiconductor / 메모리 반도체** | **L1–L5** | **SK hynix-style 풀 밸류체인** — 기술개발·설계·마스크·사진·식각·확산·박막·CMP·습식·계측·Probe·조립(HBM)·테스트·RTD·자재·수율·설비 (**~200맵**) |
+| EV Battery / 이차전지 | L1–L4 | 전극·셀·포메이션·팩 |
+
+L1=Domain … L5=Task. `parent_map_id` 트리 + Call Activity 드릴다운. subprocess 핸들 `in` / `__primary__`. L5는 버전 이력 경량(게시1+draft1). L1–L4는 v1–v5 풀 워크플로.
+
+**큰 판 시드** — L1/L2/L3/L4 캔버스는 하위를 **순차 subprocess 한 줄**(`Start → A → B → … → End`)로 배치. `canvas_chain`이 있으면 그 키 순서를 사용(예: Photo L1 = Coat→Expose→Develop→CD). 더블클릭 드릴인·breadcrumb UX와 맞춤.
 
 **로컬 로그인 피커** — `/login`의 임시 로그인이 백엔드 디렉터리(전 직원)를 조회·검색해 400명 중 아무나 골라 접속(관리자는 `admin` 배지). 인증 OFF에서 dev 유저는 `bpm.devUser`에 저장.
 

@@ -12,9 +12,19 @@ import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 export interface ProcessLibraryPanelProps {
   currentMapId: number;
   onClose: () => void;
+  /** pick 모드 — 드래그 대신 클릭으로 맵 선택(process→subprocess 링크 단축) */
+  pickMode?: boolean;
+  onPick?: (mapId: number, name: string) => void;
+  pickHint?: string;
 }
 
-export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPanelProps) {
+export function ProcessLibraryPanel({
+  currentMapId,
+  onClose,
+  pickMode = false,
+  onPick,
+  pickHint,
+}: ProcessLibraryPanelProps) {
   const { t } = useI18n();
   const [rows, setRows] = useState<LibraryProcess[]>([]);
   const [query, setQuery] = useState("");
@@ -62,9 +72,16 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
     >
       {/* header */}
       <div className="flex items-center justify-between border-b border-hairline px-3 py-2">
-        <div className="flex items-center gap-1.5 text-caption font-semibold text-ink">
-          <Network size={14} strokeWidth={1.5} />
-          {t("library.title")}
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex items-center gap-1.5 text-caption font-semibold text-ink">
+            <Network size={14} strokeWidth={1.5} />
+            {pickMode ? t("library.pickTitle") : t("library.title")}
+          </div>
+          {pickMode && (
+            <p className="truncate text-fine text-accent">
+              {pickHint ?? t("library.pickHint")}
+            </p>
+          )}
         </div>
         <button
           type="button"
@@ -104,14 +121,22 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
             return (
               <div
                 key={row.map_id}
-                draggable={!blocked}
-                onDragStart={blocked ? undefined : (e) => handleDragStart(e, row)}
+                draggable={!blocked && !pickMode}
+                onDragStart={
+                  blocked || pickMode ? undefined : (e) => handleDragStart(e, row)
+                }
+                onClick={() => {
+                  if (blocked || !pickMode || !onPick) return;
+                  onPick(row.map_id, row.name);
+                }}
                 title={blocked ? t("library.cycleBlocked") : row.name}
                 className={[
-                  "flex cursor-grab items-center gap-2 border-b border-hairline px-3 py-2 text-caption text-ink",
+                  "flex items-center gap-2 border-b border-hairline px-3 py-2 text-caption text-ink",
                   blocked
                     ? "cursor-not-allowed opacity-40"
-                    : "hover:bg-surface-alt active:cursor-grabbing",
+                    : pickMode
+                      ? "cursor-pointer hover:bg-accent-tint/50"
+                      : "cursor-grab hover:bg-surface-alt active:cursor-grabbing",
                 ]
                   .filter(Boolean)
                   .join(" ")}

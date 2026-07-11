@@ -136,11 +136,11 @@ export function MapCard({
     <div
       ref={rootRef}
       data-id="map-card"
-      className={`group relative cursor-pointer select-none rounded-sm border bg-surface p-4 hover:bg-surface-alt ${
+      className={`group relative cursor-pointer select-none rounded-lg border bg-surface p-4 transition-colors hover:bg-surface-pearl ${
         highlighted
           ? "animate-pulse border-accent ring-2 ring-accent"
           : selected
-            ? "border-accent ring-1 ring-accent"
+            ? "border-accent ring-1 ring-accent bg-accent-tint/40"
             : "border-hairline"
       }`}
       onClick={(e) => {

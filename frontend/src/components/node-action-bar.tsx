@@ -5,7 +5,7 @@
 // locked/undesignated subprocess는 기존 캔버스 동작대로 펼치기 버튼 미노출(노드 뱃지가 사유 표시).
 
 import { useStore } from "@xyflow/react";
-import { ChevronDown, ExternalLink, Link, LogOut } from "lucide-react";
+import { ChevronDown, ExternalLink, Link, LogOut, MousePointerClick } from "lucide-react";
 
 import type { NodeData } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
@@ -24,6 +24,8 @@ interface BarTarget {
   groupIds: string[];
   groupKey: string; // eq 비교용 join — 배열 참조 변동에 둔감
   expandable: boolean; // subprocess && subEnds>0 && !locked && !undesignated
+  drillable: boolean; // subprocess with linked map, not locked/undesignated
+  linkableProcess: boolean; // plain process — can bind Call Activity
   dragging: boolean;
 }
 
@@ -37,6 +39,8 @@ function eq(a: BarTarget | null, b: BarTarget | null): boolean {
     a.urlLabel === b.urlLabel &&
     a.groupKey === b.groupKey &&
     a.expandable === b.expandable &&
+    a.drillable === b.drillable &&
+    a.linkableProcess === b.linkableProcess &&
     a.dragging === b.dragging
   );
 }
@@ -45,10 +49,16 @@ export function NodeActionBar({
   readOnly,
   onLeaveGroups,
   onOpenLink,
+  onDrillIn,
+  onLinkSubprocess,
 }: {
   readOnly: boolean;
   onLeaveGroups: (groupIds: string[]) => void;
   onOpenLink: (url: string) => void;
+  /** 더블클릭과 동일 — Call Activity 딥뷰 드릴인 */
+  onDrillIn?: (nodeId: string) => void;
+  /** 일반 process → 라이브러리에서 맵 골라 subprocess 링크 */
+  onLinkSubprocess?: (nodeId: string) => void;
 }) {
   const { t } = useI18n();
   const { onToggleExpand, expandedInlineIds } = useNodeActions();
@@ -77,6 +87,12 @@ export function NodeActionBar({
           (data.subEnds ?? []).length > 0 &&
           !data.locked &&
           !data.undesignated,
+        drillable:
+          isSub &&
+          data.linkedMapId != null &&
+          !data.locked &&
+          !data.undesignated,
+        linkableProcess: data.nodeType === "process" && !readOnly,
         dragging: n.dragging ?? false,
       };
     }
@@ -87,9 +103,11 @@ export function NodeActionBar({
 
   const expanded = expandedInlineIds.has(target.id);
   const showExpand = target.expandable && onToggleExpand !== null;
+  const showDrill = target.drillable && onDrillIn != null;
+  const showBind = target.linkableProcess && onLinkSubprocess != null;
   const showLink = isSafePreviewUrl(target.url);
   const showLeave = !readOnly && target.groupIds.length > 0;
-  if (!showExpand && !showLink && !showLeave) return null;
+  if (!showExpand && !showDrill && !showBind && !showLink && !showLeave) return null;
 
   // 액센트 버튼(펼치기·링크) 공통 — 그룹 나가기는 중립→hover 위험색
   const accentBtn =
@@ -109,6 +127,36 @@ export function NodeActionBar({
     >
       {/* 노드-바 커넥터 선 */}
       <div className="pointer-events-none absolute -top-[7px] left-1/2 h-[7px] w-px -translate-x-1/2 bg-accent-tint-border" />
+      {showDrill && (
+        <button
+          type="button"
+          data-id="node-action-drill"
+          aria-label={t("node.action.drill")}
+          title={t("subprocess.drillHint")}
+          onClick={() => onDrillIn?.(target.id)}
+          className={accentBtn}
+        >
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-xs bg-accent-tint">
+            <MousePointerClick size={12} strokeWidth={1.5} />
+          </span>
+          {t("node.action.drill")}
+        </button>
+      )}
+      {showBind && (
+        <button
+          type="button"
+          data-id="node-action-link-subprocess"
+          aria-label={t("node.action.linkSubprocess")}
+          title={t("node.action.linkSubprocessHint")}
+          onClick={() => onLinkSubprocess?.(target.id)}
+          className={accentBtn}
+        >
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-xs bg-accent-tint">
+            <Link size={12} strokeWidth={1.5} />
+          </span>
+          {t("node.action.linkSubprocess")}
+        </button>
+      )}
       {showExpand && (
         <button
           type="button"

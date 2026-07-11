@@ -49,6 +49,7 @@ npm run dev
 | S6 start/end | S1의 Import 탭에서 소멸 목록 확인 | Start/End가 소멸 목록에 **없음**(모델이 빼먹어도 폴백이 유지시킴 — 유지되면 통과) |
 | S7 사용량 계측 | 위 호출들 후 설정 > Analytics > Dashboard | AI usage에 호출 수·**토큰이 0이 아닌 실값**으로 집계(토큰이 비면 vLLM이 usage 미반환 — 버전 확인 필요) |
 | S8 answer 품질 | "승인 워크플로우는 어떻게 써?" | 매뉴얼 근거 답변 + 섹션 인용("3. 승인 워크플로우" 형식) |
+| **S9 Transcript** | AI 패널 **Transcript** 모드에 80자+ 회의록 붙여넣기 → Generate map draft | Import 탭 graph 프리뷰 노출·Apply 후 노드 증가. 채팅 유저 메시지는 글자 수 요약만(원문 미표시) |
 
 ## 3. 판정 → 후속 매핑
 

@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     ai_api_token: str = ""  # 레거시 단일 키 — AI_API_KEY_1~3 우선
     ai_model: str = ""
     ai_timeout_seconds: int = 60  # 요청 타임아웃(초)
+    # 트랜스크립트 → 맵 초안 입력 상한(자). 초과 시 400, 절단 금지 (design 2026-07-11)
+    ai_transcript_max_chars: int = 48000
     # Gemini 키 로테이션 (시크릿 — .env만). 1번 키로 모델 순차 시도 → 소진 시 2번 → 3번.
     ai_api_key_1: str = ""
     ai_api_key_2: str = ""

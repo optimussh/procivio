@@ -9,60 +9,62 @@
 }
 
 @theme {
-  /* Accent — 단일 바이올렛(Whimsical), 세 역할 + tint */
-  --color-accent: #6a41ff;
-  --color-accent-focus: #5733e0;
-  --color-accent-elevated: #4a29c2;
+  /* Accent — Apple Action Blue 단일 인터랙티브 색 (docs/DESIGN-apple) */
+  --color-accent: #0066cc;
+  --color-accent-focus: #0071e3;
+  --color-accent-elevated: #004d99;
   --color-on-accent: #ffffff;
-  --color-accent-tint: #efebff; /* 선택 행/활성 툴 배경 */
-  --color-accent-tint-border: #d7ccff;
+  --color-accent-tint: #e8f2fc; /* 선택 행/활성 툴 배경 */
+  --color-accent-tint-border: #b3d4f5;
+  /* dark surface link blue — 다크 타일용 (필요 시) */
+  --color-accent-on-dark: #2997ff;
 
-  /* Surfaces */
+  /* Surfaces — pure white / parchment / pearl */
   --color-surface: #ffffff;
   --color-surface-alt: #f5f5f7;
   --color-surface-pearl: #fafafc;
   --color-surface-chip: #d2d2d7;
-  --color-canvas: #f6f6f8; /* 무한 캔버스 배경 */
-  --color-canvas-dot: #bdbdc9; /* dot-grid 점 — 가시성 위해 진하게 */
+  --color-canvas: #f5f5f7; /* 무한 캔버스 — parchment */
+  --color-canvas-dot: #c7c7cc; /* dot-grid 점 */
 
-  /* Ink */
-  --color-ink: #16161d;
+  /* Ink — Apple near-black */
+  --color-ink: #1d1d1f;
   --color-ink-secondary: #333333;
   --color-ink-tertiary: #7a7a7a;
-  --color-ink-muted: #a0a0a8; /* placeholder·divider 라벨·푸터 등 약한 뮤트 텍스트 */
+  --color-ink-muted: #a1a1a6; /* placeholder·divider 라벨·푸터 등 약한 뮤트 텍스트 */
 
   /* Borders */
   --color-divider: #f0f0f0;
-  --color-hairline: #e6e6ea;
-  --color-border-strong: #c9c9d1; /* 엣지 기본선 */
+  --color-hairline: #e0e0e0;
+  --color-border-strong: #c7c7cc; /* 엣지 기본선 */
 
   /* Feedback */
   --color-error: #cc3300;
   --color-notice: #fdf8ec; /* 안내 스트립(뷰어 읽기전용 등) 연한 옐로우 bg */
   --color-notice-border: #e2c98f;
 
-  /* Elevation — Whimsical 쿨톤 저확산 (노드 hover / 패널 / 플로팅) */
-  --shadow-sm: 0 1px 2px rgba(22, 22, 29, 0.06);
-  --shadow-md: 0 4px 12px rgba(22, 22, 29, 0.08);
-  --shadow-lg: 0 8px 28px rgba(22, 22, 29, 0.12);
+  /* Elevation — whisper soft (플로팅·카드만). 제품 이미지가 없는 SaaS라 sm/md 유지 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.1);
 
   /* Diff(비교) — 노드 타입 의미색으로도 재사용 */
   --color-added: #16794f;
   --color-removed: #cc3300;
   --color-changed: #9a6b00;
 
-  /* 엣지 방향 강조 — 선택 노드로 들어오는(teal)·나가는(orange) 흐름. 한류/난류 대비로 방향 구분 */
+  /* 엣지 방향 강조 — 선택 노드로 들어오는(teal)·나가는(orange) 흐름 */
   --color-edge-in: #0d9488;
   --color-edge-out: #ea580c;
-  /* 선택된 엣지 강조색 — accent보다 밝은 바이올렛으로 또렷하게 */
-  --color-edge-selected: #7c4dff;
-  /* 판단(decision) 분기 엣지 — 은은한 파스텔 블루(Yes)/레드(No). 무채도 팔레트와 조화, 과강조 회피 */
+  /* 선택된 엣지 — Action Blue 계열 */
+  --color-edge-selected: #0071e3;
+  /* 판단(decision) 분기 엣지 — 파스텔 블루(Yes)/레드(No) */
   --color-branch-yes: #6f93cc;
   --color-branch-no: #cf7e84;
 
-  /* Fonts */
-  --font-text: "Pretendard Variable", Pretendard, -apple-system, "SF Pro Text", system-ui, sans-serif;
-  --font-display: "Pretendard Variable", Pretendard, -apple-system, "SF Pro Display", system-ui, sans-serif;
+  /* Fonts — system stack first (SF Pro on Apple), Pretendard for CJK parity */
+  --font-text: -apple-system, "SF Pro Text", "Pretendard Variable", Pretendard, system-ui, sans-serif;
+  --font-display: -apple-system, "SF Pro Display", "Pretendard Variable", Pretendard, system-ui, sans-serif;
 
   /* Type scale */
   --text-tagline: 21px;
@@ -101,7 +103,7 @@
 }
 
 body {
-  background: var(--color-surface);
+  background: var(--color-surface-alt); /* parchment page canvas */
   color: var(--color-ink);
   font-family: var(--font-text);
   -webkit-font-smoothing: antialiased;
@@ -206,7 +208,7 @@ button:not(:disabled):active {
   }
 }
 
-/* 엣지 — 기본선 border-strong, 선택 시 바이올렛 accent. 점선 marching 애니메이션은 React Flow `animated` 기본 제공 */
+/* 엣지 — 기본선 border-strong, 선택 시 Action Blue. 점선 marching 애니메이션은 React Flow `animated` 기본 제공 */
 .react-flow__edge-path {
   stroke: var(--color-border-strong);
   stroke-width: 1.5;
@@ -214,7 +216,7 @@ button:not(:disabled):active {
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:focus .react-flow__edge-path,
 .react-flow__edge:focus-visible .react-flow__edge-path {
-  /* 선택 강조 — 선명한 강조색(밝은 바이올렛) + 굵기↑ + 이중 저확산 글로우로 또렷하게 */
+  /* 선택 강조 — Action Blue + 굵기↑ + 이중 저확산 글로우 */
   stroke: var(--color-edge-selected);
   stroke-width: 3.5;
   filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-edge-selected) 70%, transparent))

@@ -58,14 +58,27 @@ class StructureMapNodeOut(BaseModel):
     name: str
     workflow_level: int
     parent_map_id: int | None
+    # Catalog industry tag (not a workflow level) — from description ``industry:…``
+    industry: str | None = None
     children: list["StructureMapNodeOut"] = Field(default_factory=list)
+
+
+class StructureIndustryGroupOut(BaseModel):
+    """Demo catalog section — groups L1 Domain roots by industry (customer acquisition)."""
+
+    name: str
+    roots: list[StructureMapNodeOut] = Field(default_factory=list)
 
 
 class StructureTreeOut(BaseModel):
     roots: list[StructureMapNodeOut]
+    # Industry sections for Structure UI; empty when no industry tags
+    industries: list[StructureIndustryGroupOut] = Field(default_factory=list)
 
 
 StructureMapNodeOut.model_rebuild()
+StructureIndustryGroupOut.model_rebuild()
+StructureTreeOut.model_rebuild()
 
 
 class OwningDepartmentIn(BaseModel):
@@ -943,6 +956,16 @@ class AiChatRequest(BaseModel):
     inquire_step: int | None = Field(default=None, ge=0, le=20)
     # 누적 답변 — 키는 scope|start_end|actors|steps|branches
     inquire_answers: dict[str, str] = Field(default_factory=dict)
+
+
+class AiTranscriptRequest(BaseModel):
+    """회의록·인터뷰 전문 → kind=graph 초안 (design 2026-07-11). 길이 한도는 라우터에서."""
+
+    transcript: str = Field(min_length=1)
+    focus: str = Field(default="", max_length=500)
+    industry_hint: str = Field(default="", max_length=100)
+    session_id: int | None = None
+    model: str | None = None
 
 
 class AiModelsOut(BaseModel):

@@ -26,6 +26,7 @@ from app.ai_prompt import (
     advance_inquire,
     build_inquire_generate_messages,
     build_messages,
+    build_transcript_generate_messages,
 )
 from app.auth import get_current_user
 from app.checkout import is_checkout_active
@@ -34,8 +35,16 @@ from app.permissions.deps import require_version_map_role
 from app.manual import get_manual
 from app.models import AiChatMessage, AiChatSession, AiUsageEvent, ManualDoc, MapVersion
 from app.routers.graph import _load_graph
-from app.schemas import AiChatRequest, AiModelsOut, AiProposal, AiTipsOut
+from app.schemas import (
+    AiChatRequest,
+    AiModelsOut,
+    AiProposal,
+    AiTipsOut,
+    AiTranscriptRequest,
+)
 from app.settings import settings
+
+_TRANSCRIPT_MIN_CHARS = 80
 
 router = APIRouter(prefix="/api", tags=["ai"], dependencies=[Depends(get_current_user)])
 
@@ -326,6 +335,204 @@ async def ai_chat(
         session, user, version.map_id, await get_ai_chat_max_sessions(session)
     )
     # 사용량 이벤트 — 대화와 같은 트랜잭션(원문 없이 계량만)
+    session.add(
+        AiUsageEvent(
+            login_id=user,
+            map_id=version.map_id,
+            version_id=version_id,
+            model=payload.model or "",
+            kind=proposal.kind,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            ok=True,
+        )
+    )
+    await session.commit()
+    proposal.session_id = chat_session.id
+    return proposal
+
+
+@router.post(
+    "/versions/{version_id}/ai/from-transcript",
+    response_model=AiProposal,
+    dependencies=[Depends(require_version_map_role("viewer"))],
+)
+async def ai_from_transcript(
+    version_id: int,
+    payload: AiTranscriptRequest,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> AiProposal:
+    """회의록·인터뷰 전문 → kind=graph 초안 (design 2026-07-11).
+
+    원문 트랜스크립트는 채팅 메시지·usage 이벤트에 저장하지 않는다(요약·글자 수만).
+    """
+    if not settings.ai_enabled:
+        raise HTTPException(status_code=503, detail="AI is disabled")
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+
+    chat_session: AiChatSession | None = None
+    if payload.session_id is not None:
+        chat_session = await session.get(AiChatSession, payload.session_id)
+        if (
+            chat_session is None
+            or chat_session.login_id != user
+            or chat_session.map_id != version.map_id
+        ):
+            raise HTTPException(
+                status_code=404, detail=f"chat session {payload.session_id} not found"
+            )
+
+    text = payload.transcript.strip()
+    max_chars = settings.ai_transcript_max_chars
+    if len(text) < _TRANSCRIPT_MIN_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"transcript too short (min {_TRANSCRIPT_MIN_CHARS} characters)",
+        )
+    if len(text) > max_chars:
+        raise HTTPException(
+            status_code=400,
+            detail=f"transcript too long (max {max_chars} characters)",
+        )
+
+    now = now_kst()
+    can_edit = (
+        workflow.is_editable_status(version.status)
+        and is_checkout_active(version, now)
+        and version.checked_out_by == user
+    )
+    if not can_edit:
+        raise HTTPException(status_code=403, detail=_NOT_EDITABLE_MSG)
+
+    current = await _load_graph(session, version_id)
+    # 매뉴얼 선별 — 초점·힌트 기반 (원문 전체로 점수 매기지 않음)
+    select_q = " ".join(
+        p for p in (payload.focus, payload.industry_hint, "프로세스 맵 생성") if p
+    )
+    manual_text = select_manual_sections(
+        await _load_manual_text(session), select_q, _MANUAL_SELECT_BUDGET
+    )
+    messages = build_transcript_generate_messages(
+        manual=manual_text,
+        current_graph=current,
+        can_edit=can_edit,
+        transcript=text,
+        focus=payload.focus,
+        industry_hint=payload.industry_hint,
+    )
+    try:
+        proposal, usage = await _ask_and_validate(messages, payload.model)
+    except HTTPException as exc:
+        totals = getattr(exc, "usage_totals", None)
+        try:
+            session.add(
+                AiUsageEvent(
+                    login_id=user,
+                    map_id=version.map_id,
+                    version_id=version_id,
+                    model=payload.model or "",
+                    kind=None,
+                    prompt_tokens=getattr(totals, "prompt_tokens", None),
+                    completion_tokens=getattr(totals, "completion_tokens", None),
+                    ok=False,
+                )
+            )
+            await session.commit()
+        except Exception:  # noqa: BLE001
+            await session.rollback()
+            logger.warning("AI usage event insert failed (transcript failure path)")
+        raise
+
+    # graph 아니면 1회 강제 재생성 (self-repair)
+    if proposal.kind != "graph" or not proposal.nodes:
+        repair = [
+            *messages,
+            {
+                "role": "user",
+                "content": (
+                    "이전 출력이 유효한 kind=graph 가 아닙니다. "
+                    "반드시 kind=graph JSON 한 개만, start/process/end 포함."
+                ),
+            },
+        ]
+        try:
+            proposal, usage2 = await _ask_and_validate(repair, payload.model)
+            usage.add(
+                ai_client.AiReply(
+                    content="",
+                    prompt_tokens=usage2.prompt_tokens,
+                    completion_tokens=usage2.completion_tokens,
+                )
+            )
+        except HTTPException as exc:
+            totals = getattr(exc, "usage_totals", None)
+            try:
+                session.add(
+                    AiUsageEvent(
+                        login_id=user,
+                        map_id=version.map_id,
+                        version_id=version_id,
+                        model=payload.model or "",
+                        kind=None,
+                        prompt_tokens=getattr(totals, "prompt_tokens", None),
+                        completion_tokens=getattr(totals, "completion_tokens", None),
+                        ok=False,
+                    )
+                )
+                await session.commit()
+            except Exception:  # noqa: BLE001
+                await session.rollback()
+            raise
+
+    if proposal.kind != "graph":
+        proposal = AiProposal(
+            kind="answer",
+            message=proposal.message or "Could not build a process map from the transcript.",
+        )
+
+    # 채팅 적재 — 원문 대신 요약만
+    summary = (
+        f"[transcript {len(text)} chars"
+        + (f", focus={payload.focus[:80]}" if payload.focus.strip() else "")
+        + (f", hint={payload.industry_hint[:40]}" if payload.industry_hint.strip() else "")
+        + "]"
+    )
+    if chat_session is None:
+        chat_session = AiChatSession(
+            map_id=version.map_id,
+            login_id=user,
+            title=derive_chat_title(payload.focus or "Transcript map"),
+        )
+        session.add(chat_session)
+        await session.flush()
+    session.add(
+        AiChatMessage(
+            session_id=chat_session.id,
+            role="user",
+            content=summary,
+            version_id=version_id,
+        )
+    )
+    session.add(
+        AiChatMessage(
+            session_id=chat_session.id,
+            role="assistant",
+            content=proposal.message,
+            kind=proposal.kind,
+            payload=serialize_proposal_payload(proposal),
+            version_id=version_id,
+        )
+    )
+    chat_session.updated_at = now
+    await prune_chat_session_messages(
+        session, chat_session.id, await get_ai_chat_max_messages(session)
+    )
+    await prune_map_chat_sessions(
+        session, user, version.map_id, await get_ai_chat_max_sessions(session)
+    )
     session.add(
         AiUsageEvent(
             login_id=user,

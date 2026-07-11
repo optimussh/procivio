@@ -26,6 +26,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MarkdownView } from "@/components/markdown-view";
 import {
   aiChat,
+  aiFromTranscript,
   deleteAiChatSession,
   getAiChatMessages,
   getAiChatSessions,
@@ -125,6 +126,11 @@ export function AiChatPanel({
   const [inquireStep, setInquireStep] = useState(0);
   const [inquireAnswers, setInquireAnswers] = useState<Record<string, string>>({});
   const [inquireDone, setInquireDone] = useState(false);
+  // Transcript 모드 — 회의록 붙여넣기 (design 2026-07-11 interview-transcript-map)
+  const [transcriptMode, setTranscriptMode] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [transcriptFocus, setTranscriptFocus] = useState("");
+  const [industryHint, setIndustryHint] = useState("none");
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [historyError, setHistoryError] = useState(false); // 목록/메시지 로딩 실패 — 인라인 재시도
@@ -425,6 +431,7 @@ export function AiChatPanel({
   };
 
   const startInquire = () => {
+    setTranscriptMode(false);
     setInquireMode(true);
     setInquireStep(0);
     setInquireAnswers({});
@@ -438,6 +445,63 @@ export function AiChatPanel({
       step: inquireStep,
       answers: inquireAnswers,
     });
+  };
+
+  const TRANSCRIPT_MIN = 80;
+
+  const generateFromTranscript = async () => {
+    const text = transcript.trim();
+    if (!aiEnabled || busy || isForeign || !canEdit) return;
+    if (text.length < TRANSCRIPT_MIN) {
+      onToast?.(t("ai.transcript.tooShort"));
+      return;
+    }
+    setBusy(true);
+    const targetSessionId = activeSessionId;
+    const userMessage = createLocalMessage(
+      "user",
+      t("ai.transcript.userBubble", { n: text.length }),
+    );
+    setMessages((prev) => [...prev, userMessage]);
+    try {
+      const proposal = await aiFromTranscript(versionId, {
+        transcript: text,
+        focus: transcriptFocus.trim(),
+        industry_hint: industryHint === "none" ? "" : industryHint,
+        session_id: targetSessionId,
+        model: model || null,
+      });
+      const content = proposal.message || t("ai.unsupportedKind");
+      if (activeSessionIdRef.current === targetSessionId) {
+        setMessages((prev) => [
+          ...prev,
+          createLocalMessage("assistant", content, proposal.kind, toPayload(proposal)),
+        ]);
+      }
+      if (
+        targetSessionId === null &&
+        proposal.session_id != null &&
+        activeSessionIdRef.current === targetSessionId
+      ) {
+        setActiveSessionId(proposal.session_id);
+      }
+      refreshSessions();
+      if (proposal.kind === "graph") {
+        onGraphProposal(proposal);
+      }
+    } catch (err) {
+      if (activeSessionIdRef.current === targetSessionId) {
+        setMessages((prev) => [
+          ...prev,
+          createLocalMessage(
+            "assistant",
+            err instanceof Error ? err.message : t("ai.error"),
+          ),
+        ]);
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -461,15 +525,34 @@ export function AiChatPanel({
           </select>
         </div>
       )}
-      {/* Inquire — 인터뷰 모드 토글·진행·초안 생성 (design 2026-07-11) */}
+      {/* 모드: Chat / Inquire / Transcript (design 2026-07-11) */}
       {aiEnabled && (
         <div
-          data-id="ai-inquire-bar"
-          className="flex flex-wrap items-center gap-1.5 border-b border-hairline px-2 py-1.5"
+          data-id="ai-mode-bar"
+          className="flex flex-wrap items-center gap-1 border-b border-hairline px-2 py-1.5"
         >
           <button
             type="button"
-            data-id="ai-inquire-toggle"
+            data-id="ai-mode-chat"
+            disabled={busy || isForeign}
+            onClick={() => {
+              setInquireMode(false);
+              setTranscriptMode(false);
+              setInquireDone(false);
+              setInquireAnswers({});
+              setInquireStep(0);
+            }}
+            className={`rounded-full border px-2.5 py-0.5 text-fine font-medium ${
+              !inquireMode && !transcriptMode
+                ? "border-accent bg-accent-tint text-accent"
+                : "border-hairline text-ink-secondary hover:bg-surface-alt"
+            }`}
+          >
+            {t("ai.mode.chat")}
+          </button>
+          <button
+            type="button"
+            data-id="ai-mode-inquire"
             disabled={busy || isForeign}
             onClick={() => {
               if (inquireMode) {
@@ -481,17 +564,36 @@ export function AiChatPanel({
                 startInquire();
               }
             }}
-            className={`rounded-sm border px-2 py-0.5 text-fine font-medium ${
+            className={`rounded-full border px-2.5 py-0.5 text-fine font-medium ${
               inquireMode
                 ? "border-accent bg-accent-tint text-accent"
                 : "border-hairline text-ink-secondary hover:bg-surface-alt"
             }`}
           >
-            {inquireMode ? "Inquire ON" : "Inquire"}
+            {t("ai.mode.inquire")}
+          </button>
+          <button
+            type="button"
+            data-id="ai-mode-transcript"
+            disabled={busy || isForeign}
+            onClick={() => {
+              setInquireMode(false);
+              setInquireDone(false);
+              setInquireAnswers({});
+              setInquireStep(0);
+              setTranscriptMode((v) => !v);
+            }}
+            className={`rounded-full border px-2.5 py-0.5 text-fine font-medium ${
+              transcriptMode
+                ? "border-accent bg-accent-tint text-accent"
+                : "border-hairline text-ink-secondary hover:bg-surface-alt"
+            }`}
+          >
+            {t("ai.mode.transcript")}
           </button>
           {inquireMode && (
             <span className="text-fine text-ink-tertiary">
-              {inquireDone ? "완료" : `Q ${Math.min(inquireStep + 1, 5)}/5`}
+              {inquireDone ? t("ai.inquire.done") : `Q ${Math.min(inquireStep + 1, 5)}/5`}
             </span>
           )}
           {inquireMode &&
@@ -502,11 +604,68 @@ export function AiChatPanel({
                 data-id="ai-inquire-generate"
                 disabled={busy || Object.keys(inquireAnswers).length === 0}
                 onClick={() => generateFromInquire()}
-                className="ml-auto rounded-sm bg-accent px-2 py-0.5 text-fine font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-50"
+                className="ml-auto rounded-full bg-accent px-2.5 py-0.5 text-fine font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-50"
               >
-                초안 생성
+                {t("ai.inquire.generate")}
               </button>
             )}
+        </div>
+      )}
+      {aiEnabled && transcriptMode && (
+        <div
+          data-id="ai-transcript-panel"
+          className="flex flex-col gap-1.5 border-b border-hairline bg-surface-pearl p-2"
+        >
+          <p className="text-fine text-ink-tertiary">{t("ai.transcript.disclaimer")}</p>
+          <textarea
+            data-id="ai-transcript-input"
+            value={transcript}
+            onChange={(e) => setTranscript(e.target.value)}
+            placeholder={t("ai.transcript.placeholder")}
+            rows={6}
+            disabled={busy || !canEdit}
+            className="w-full resize-y rounded-md border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none focus:border-accent disabled:opacity-50"
+          />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <input
+              data-id="ai-transcript-focus"
+              type="text"
+              value={transcriptFocus}
+              onChange={(e) => setTranscriptFocus(e.target.value)}
+              placeholder={t("ai.transcript.focus")}
+              disabled={busy || !canEdit}
+              className="min-w-[8rem] flex-1 rounded-sm border border-hairline px-2 py-1 text-fine outline-none focus:border-accent"
+            />
+            <select
+              data-id="ai-transcript-industry"
+              value={industryHint}
+              onChange={(e) => setIndustryHint(e.target.value)}
+              disabled={busy || !canEdit}
+              aria-label={t("ai.transcript.industry")}
+              className="rounded-sm border border-hairline px-1 py-1 text-fine"
+            >
+              <option value="none">{t("ai.transcript.industryNone")}</option>
+              <option value="antibody">{t("ai.transcript.industryAntibody")}</option>
+              <option value="semiconductor">{t("ai.transcript.industrySemi")}</option>
+              <option value="battery">{t("ai.transcript.industryBattery")}</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-fine text-ink-tertiary">
+              {t("ai.transcript.chars", { n: transcript.trim().length })}
+            </span>
+            <button
+              type="button"
+              data-id="ai-transcript-generate"
+              disabled={
+                busy || !canEdit || isForeign || transcript.trim().length < TRANSCRIPT_MIN
+              }
+              onClick={() => void generateFromTranscript()}
+              className="rounded-full bg-accent px-3 py-1 text-fine font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-50"
+            >
+              {busy ? t("ai.thinking") : t("ai.transcript.generate")}
+            </button>
+          </div>
         </div>
       )}
       {/* 대화 전환 바 — 현재 맵의 서버 세션 드롭다운 + 새 대화(지연 생성). */}

@@ -399,12 +399,12 @@ export default function MapListPage() {
     >
       {/* 제목 + New map (검색·필터는 좌측 리스트 컬럼 상단으로 이동, #5) */}
       <div className="mx-auto mb-4 flex w-full max-w-[80rem] shrink-0 items-center justify-between gap-4">
-        <h1 data-id="home-title" className="text-tagline text-ink">Process Maps</h1>
+        <h1 data-id="home-title" className="text-tagline tracking-tight text-ink">Process Maps</h1>
         <div className="flex shrink-0 items-center gap-2">
           {/* Manual — 홈 헤더에서도 매뉴얼 열람(뷰어 /manual). New map 왼쪽 보조 버튼 */}
           <button
             data-id="home-manual-btn"
-            className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline bg-surface px-3 py-2 text-caption-strong text-ink hover:bg-surface-alt"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-hairline bg-surface px-3.5 py-2 text-caption-strong text-ink hover:bg-surface-pearl"
             onClick={() => router.push("/manual")}
           >
             <BookOpen size={16} strokeWidth={1.5} />
@@ -414,7 +414,7 @@ export default function MapListPage() {
               stopPropagation은 메뉴를 소유한 쉐브론·메뉴 컨테이너에만 — 왼쪽 버튼은 버블시켜 빈 여백 선택 해제를 유지한다. */}
           <div className="relative flex shrink-0">
             <button
-              className="inline-flex shrink-0 items-center gap-1 rounded-l-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
+              className="inline-flex shrink-0 items-center gap-1 rounded-l-full bg-accent px-3.5 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
               onClick={() => {
                 setCreateMenuOpen(false);
                 setDialogOpen(true);
@@ -427,7 +427,7 @@ export default function MapListPage() {
               data-id="home-create-menu-toggle"
               aria-expanded={createMenuOpen}
               aria-label={t("csvImport.createFromCsv")}
-              className="inline-flex shrink-0 items-center rounded-r-sm border-l border-accent-focus bg-accent px-2 py-2 text-on-accent hover:bg-accent-focus"
+              className="inline-flex shrink-0 items-center rounded-r-full border-l border-accent-focus bg-accent px-2.5 py-2 text-on-accent hover:bg-accent-focus"
               onClick={(event) => {
                 event.stopPropagation(); // 바깥클릭 닫기 리스너가 방금 연 메뉴를 닫지 않도록
                 setCreateMenuOpen((open) => !open);
@@ -437,7 +437,7 @@ export default function MapListPage() {
             </button>
             {createMenuOpen && (
               <div
-                className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-sm border border-hairline bg-surface py-1 shadow-lg"
+                className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-lg border border-hairline bg-surface py-1 shadow-lg"
                 onClick={(event) => event.stopPropagation()}
               >
                 <button

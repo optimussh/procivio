@@ -11,20 +11,20 @@ export function WelcomePlaceholder({ onCreate }: { onCreate?: () => void }) {
   return (
     <div
       data-id="welcome-placeholder"
-      className="flex flex-1 flex-col items-center justify-center gap-4 rounded-sm border border-dashed border-divider bg-surface-pearl p-10 text-center"
+      className="flex flex-1 flex-col items-center justify-center gap-5 rounded-lg border border-dashed border-hairline bg-surface p-12 text-center"
     >
       <div className="rounded-full bg-accent-tint p-4">
         <Workflow size={28} strokeWidth={1.5} className="text-accent" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-tagline text-ink">{t("home.welcomeTitle")}</p>
+        <p className="text-tagline tracking-tight text-ink">{t("home.welcomeTitle")}</p>
         <p className="mx-auto max-w-sm text-caption text-ink-tertiary">{t("home.welcomeSubtitle")}</p>
       </div>
       {onCreate && (
         <button
           type="button"
           onClick={onCreate}
-          className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
+          className="inline-flex items-center gap-1 rounded-full bg-accent px-4 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
         >
           <Plus size={16} strokeWidth={1.5} />
           {t("home.welcomeCta")}
