@@ -17,7 +17,7 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-ENV PORT=7000
+ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
 COPY --from=builder /app/.next/standalone ./
@@ -27,5 +27,5 @@ COPY --from=builder /app/public ./public
 # node 이미지에 내장된 비루트 사용자
 USER node
 
-EXPOSE 7000
+EXPOSE 3000
 CMD ["node", "server.js"]

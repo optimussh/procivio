@@ -15,7 +15,7 @@ services:
     build:
       context: ./frontend
     expose:
-      - "7000"
+      - "3000"
 
   backend:
     build: ./backend

@@ -21,7 +21,7 @@
 
 | 디렉터리 | 스택 | 역할 |
 |----------|------|------|
-| `frontend/` | Next.js + TypeScript + @xyflow/react | 에디터 UI (**dev :7000**) |
+| `frontend/` | Next.js + TypeScript + @xyflow/react | 에디터 UI (**dev :3000**) |
 | `backend/` | FastAPI + Python 3.12 | 맵/버전/권한/AI API (** :8000**) |
 | `nginx/` | nginx | `/` → frontend, `/api` → backend |
 | `docker-compose.yml` | + PostgreSQL 16 | 서버 배포 (호스트 **3333**) |
@@ -36,7 +36,7 @@ cd backend
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/uvicorn app.main:app --reload --port 8000
 
-# frontend — http://localhost:7000  (/api → backend 프록시)
+# frontend — http://localhost:3000  (/api → backend 프록시)
 cd frontend
 npm install
 npm run dev
@@ -51,13 +51,13 @@ python -m venv .venv
 .\.venv\Scripts\pip install -r requirements-dev.txt
 .\.venv\Scripts\uvicorn app.main:app --reload --port 8000
 
-# frontend — http://localhost:7000
+# frontend — http://localhost:3000
 cd frontend
 npm install
 npm run dev
 ```
 
-Open **http://localhost:7000** → `/login` 에서 시드/디렉터리 유저 선택.
+Open **http://localhost:3000** → `/login` 에서 시드/디렉터리 유저 선택.
 
 테스트:
 

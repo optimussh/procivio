@@ -32,7 +32,7 @@ describe("isHttpUrl", () => {
 
 describe("isSafePreviewUrl", () => {
   beforeEach(() => {
-    vi.stubGlobal("window", { location: { origin: "http://localhost:7000" } });
+    vi.stubGlobal("window", { location: { origin: "http://localhost:3000" } });
   });
 
   afterEach(() => {
@@ -47,8 +47,8 @@ describe("isSafePreviewUrl", () => {
   );
 
   it.each([
-    "http://localhost:7000/maps/2",
-    "http://localhost:7000/x",
+    "http://localhost:3000/maps/2",
+    "http://localhost:3000/x",
     "javascript:alert(1)",
     "",
     "http://",

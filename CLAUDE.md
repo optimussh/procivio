@@ -26,7 +26,7 @@ uv venv .venv && uv pip install --python .venv/bin/python -r requirements-dev.tx
 
 # frontend (frontend/ 에서, 로컬 네이티브)
 npm install
-npm run dev    # 개발 서버 :7000 — /api는 BACKEND_URL(기본 localhost:8000)로 프록시
+npm run dev    # 개발 서버 :3000 — /api는 BACKEND_URL(기본 localhost:8000)로 프록시
 npm run build  # 프로덕션 빌드 (standalone)
 npm run lint
 ```

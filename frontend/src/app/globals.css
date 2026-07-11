@@ -9,8 +9,8 @@
 }
 
 @theme {
-  /* Accent — Apple Action Blue 단일 인터랙티브 색 (docs/DESIGN-apple) */
-  --color-accent: #0066cc;
+  /* Accent — Apple Action Blue ONLY (docs/DESIGN-apple.md). Not violet/purple. */
+  --color-accent: #0066cc; /* Action Blue primary */
   --color-accent-focus: #0071e3;
   --color-accent-elevated: #004d99;
   --color-on-accent: #ffffff;

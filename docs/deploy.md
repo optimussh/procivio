@@ -58,7 +58,7 @@ docker compose up -d --build
 # http://<서버>:3333
 ```
 
-- 컨테이너 내부 frontend 포트 **7000**, nginx가 프록시.
+- 컨테이너 내부 frontend 포트 **3000**, nginx가 프록시.
 - DB 스키마는 backend 기동 시 `create_all` (+ 컬럼 보강).
 - 데모 시드(주의: drop_all): `docker compose exec backend python -m scripts.reset_db`
 
@@ -94,6 +94,6 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3333/
 
 | 서비스 | 포트 |
 |--------|------|
-| frontend `npm run dev` | **7000** |
+| frontend `npm run dev` | **3000** |
 | backend uvicorn | 8000 |
 | compose 앱 nginx | 3333 (호스트) |

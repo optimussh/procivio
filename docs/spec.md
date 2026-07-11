@@ -100,7 +100,7 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 | proxy | nginx — **서버 노출 포트 3333** | `/` → frontend, `/api` → backend |
 
 - 접속: 우선 `http://<서버IP or app.procivio.com>:3333` 포트 직접 접속 → 추후 서버 엣지 nginx에 도메인 라우팅 추가
-- 로컬 frontend 개발 포트: **7000** (`npm run dev`)
+- 로컬 frontend 개발 포트: **3000** (`npm run dev`)
 
 ## 6. 단계별 구현 순서 (제안)
 
