@@ -2,6 +2,14 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — Phase B: PDF · templates · level filter · legal (main)
+- B1 PDF export — 표지(메타)+맵 이미지 `exportCanvasPdf` (jspdf), 컨텍스트/인스펙터 진입점.
+- B2 Template maps — `is_template` 컬럼·`GET /maps/templates`·`POST /maps/{id}/from-template`·설정 토글·홈 피커.
+- B3 Home L1–L5 level multi-filter + map-card bilingual level badge.
+- B4 `/legal` NOTICE page + user menu link.
+- Polish — map settings workflow level/parent PATCH UI.
+- Structure path fix already in place (`GET /api/structure`).
+
 ## 2026-07-11 — frontend build fix: duplicate updateMap (main)
 - `api.ts` 중복 `updateMap` export 제거 — Next/TS 빌드 에러 수정.
 

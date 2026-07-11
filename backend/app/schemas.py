@@ -37,6 +37,18 @@ class MapUpdate(BaseModel):
     workflow_level: int | None = Field(default=None, ge=1, le=5)
     # Explicit null clears parent. Omitted = leave unchanged (use model_fields_set in router)
     parent_map_id: int | None = None
+    # Template gallery flag — owner/editor can toggle
+    is_template: bool | None = None
+
+
+class MapFromTemplate(BaseModel):
+    """Instantiate a new map from a template (clones latest version graph)."""
+
+    name: str = Field(min_length=1, max_length=200)
+    owning_department: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    visibility: Literal["private", "public"] = "private"
+    parent_map_id: int | None = None
 
 
 class StructureMapNodeOut(BaseModel):
@@ -454,6 +466,8 @@ class MapOut(BaseModel):
     # 워크플로 레벨 1..5 (Domain…Task). 레거시 행은 DB default 3
     workflow_level: int = 3
     parent_map_id: int | None = None
+    # 템플릿 갤러리 노출 여부 (Phase B)
+    is_template: bool = False
 
 
 class MapDetailOut(MapOut):

@@ -58,6 +58,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "workflow_level", "INTEGER DEFAULT 3"),
     ("process_maps", "parent_map_id", "INTEGER"),
     ("nodes", "performer_type", "VARCHAR(20) DEFAULT ''"),
+    # 템플릿 맵 플래그 (Phase B)
+    ("process_maps", "is_template", "BOOLEAN DEFAULT 0"),
 ]
 
 

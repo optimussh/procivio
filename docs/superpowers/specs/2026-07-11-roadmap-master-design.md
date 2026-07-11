@@ -30,8 +30,8 @@
 | P0-02b | Parent picker + PATCH | 상위 맵 지정 | ✅ | ✅ |
 | P0-02c | performer_type UI | 수행 주체 UI | ✅ | ✅ |
 | P0-05 | AI key cascade | AI 키 캐스케이드 | ✅ | ✅ |
-| P1-02 | PDF export | PDF 내보내기 | ⬜ | ⬜ |
-| P1-03 | Templates | 템플릿 맵 | ⬜ | ⬜ |
+| P1-02 | PDF export | PDF 내보내기 | ✅ | ✅ |
+| P1-03 | Templates | 템플릿 맵 | ✅ | ✅ |
 | P2-* | Runtime / mining | 실행·마이닝 | ⬜ | later |
 
 ---
@@ -82,3 +82,4 @@
 |------|------|
 | 2026-07-11 | Master design + Phase A implement |
 | 2026-07-11 | Docs bilingual EN+KO |
+| 2026-07-11 | Phase B: PDF, templates, level filter, /legal |

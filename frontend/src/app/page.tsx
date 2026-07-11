@@ -5,7 +5,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Building2, ChevronDown, ChevronUp, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
+import { BookOpen, Building2, ChevronDown, ChevronUp, CircleDot, Crown, Eye, FileUp, Layers, LayoutTemplate, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 
 import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { type CsvImportOutcome } from "@/lib/csv-import";
@@ -15,11 +15,13 @@ import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
+import { WORKFLOW_LEVELS, levelBadge } from "@/lib/workflow-levels";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { CsvCreateModal } from "@/components/csv-create-modal";
 import { FilterDropdown } from "@/components/maps/filter-dropdown";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
+import { TemplatePickerModal } from "@/components/maps/template-picker-modal";
 import { WelcomePlaceholder } from "@/components/maps/welcome-placeholder";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { SearchBox } from "@/components/search-box";
@@ -29,7 +31,7 @@ import { ToastStack, type ToastItem } from "@/components/toast-stack";
 const STATUS_ORDER = ["draft", "pending", "approved", "rejected", "published"] as const;
 
 export default function MapListPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const router = useRouter();
 
   const [maps, setMaps] = useState<MapSummary[]>([]);
@@ -37,6 +39,7 @@ export default function MapListPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [csvModalOpen, setCsvModalOpen] = useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
   // CSV 모달 → 생성 다이얼로그 핸드오프 (파싱 결과 + 파일명)
   const [csvHandoff, setCsvHandoff] = useState<{ outcome: CsvImportOutcome; fileName: string } | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -49,6 +52,8 @@ export default function MapListPage() {
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [permFilter, setPermFilter] = useState<Set<string>>(new Set());
   const [owningFilter, setOwningFilter] = useState<Set<string>>(new Set());
+  // L1–L5 multi-select — empty = all levels (Phase B3)
+  const [levelFilter, setLevelFilter] = useState<Set<string>>(new Set());
   // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
   const [copyTarget, setCopyTarget] = useState<{ id: number; name: string } | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -127,6 +132,7 @@ export default function MapListPage() {
         status?: unknown;
         perm?: unknown;
         owning?: unknown;
+        level?: unknown;
       };
       if (typeof s.q === "string") {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -143,6 +149,15 @@ export default function MapListPage() {
       }
       if (Array.isArray(s.owning)) {
         setOwningFilter(new Set(s.owning.filter((x): x is string => x === "missing")));
+      }
+      if (Array.isArray(s.level)) {
+        setLevelFilter(
+          new Set(
+            s.level.filter(
+              (x): x is string => typeof x === "string" && /^[1-5]$/.test(x),
+            ),
+          ),
+        );
       }
     } catch {
       /* 손상된 저장값 무시 */
@@ -164,9 +179,10 @@ export default function MapListPage() {
         status: [...statusFilter],
         perm: [...permFilter],
         owning: [...owningFilter],
+        level: [...levelFilter],
       }),
     );
-  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter]);
+  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter, levelFilter]);
 
   // "/" 단축키 — 입력 중이 아닐 때 검색창 포커스(GitHub식) / focus search on "/" unless already typing.
   useEffect(() => {
@@ -265,9 +281,12 @@ export default function MapListPage() {
           permFilter.size === 0 || (m.my_role !== null && permFilter.has(m.my_role));
         const owningOk =
           owningFilter.size === 0 || (owningFilter.has("missing") && !m.owning_department);
-        return visOk && statusOk && permOk && owningOk;
+        const levelOk =
+          levelFilter.size === 0 ||
+          levelFilter.has(String(m.workflow_level ?? 3));
+        return visOk && statusOk && permOk && owningOk && levelOk;
       }),
-    [visibleMaps, visFilter, statusFilter, permFilter, owningFilter],
+    [visibleMaps, visFilter, statusFilter, permFilter, owningFilter, levelFilter],
   );
 
   // 검색 필터 — 빈 쿼리면 전체 통과 / search filter; empty query returns all.
@@ -304,7 +323,7 @@ export default function MapListPage() {
   }, [mapHits]);
 
   // 25개씩 증분 렌더 — 맵이 수백 개여도 목록 렌더 부하 없음(검색어·필터 변경 시 리셋)
-  const listKey = `${mapQuery}|${visFilter}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}|${[...owningFilter].sort().join(",")}`;
+  const listKey = `${mapQuery}|${visFilter}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}|${[...owningFilter].sort().join(",")}|${[...levelFilter].sort().join(",")}`;
   const {
     visible: shownSearchHits,
     hasMore: hasMoreSearch,
@@ -432,6 +451,17 @@ export default function MapListPage() {
                   <FileUp size={16} strokeWidth={1.5} />
                   {t("csvImport.createFromCsv")}
                 </button>
+                <button
+                  data-id="home-create-from-template"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    setTemplateModalOpen(true);
+                  }}
+                >
+                  <LayoutTemplate size={16} strokeWidth={1.5} />
+                  {t("home.fromTemplate")}
+                </button>
               </div>
             )}
           </div>
@@ -546,7 +576,34 @@ export default function MapListPage() {
                     })
                   }
                 />
-                {(statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all" || owningFilter.size > 0) && (
+                <FilterDropdown
+                  label={t("home.filterLevel")}
+                  dataId="home-level-filter"
+                  icon={<Layers size={14} strokeWidth={1.5} />}
+                  options={WORKFLOW_LEVELS.map((row) => ({
+                    value: String(row.level),
+                    label: levelBadge(row.level, lang),
+                    icon: (
+                      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-hairline text-[10px] text-ink-tertiary">
+                        {row.level}
+                      </span>
+                    ),
+                  }))}
+                  selected={levelFilter}
+                  onToggle={(v) =>
+                    setLevelFilter((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(v)) next.delete(v);
+                      else next.add(v);
+                      return next;
+                    })
+                  }
+                />
+                {(statusFilter.size > 0 ||
+                  permFilter.size > 0 ||
+                  visFilter !== "all" ||
+                  owningFilter.size > 0 ||
+                  levelFilter.size > 0) && (
                   <button
                     type="button"
                     data-id="home-filter-clear"
@@ -556,6 +613,7 @@ export default function MapListPage() {
                       setPermFilter(new Set());
                       setVisFilter("all");
                       setOwningFilter(new Set());
+                      setLevelFilter(new Set());
                     }}
                   >
                     {t("home.filterClear")}
@@ -709,6 +767,16 @@ export default function MapListPage() {
             setCsvModalOpen(false);
             setCsvHandoff({ outcome, fileName });
             setDialogOpen(true);
+          }}
+        />
+      )}
+
+      {templateModalOpen && (
+        <TemplatePickerModal
+          onClose={() => setTemplateModalOpen(false)}
+          onCreated={() => {
+            void refresh();
+            showToast(t("home.copyCreated"));
           }}
         />
       )}

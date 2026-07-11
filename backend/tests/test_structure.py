@@ -28,7 +28,7 @@ def _create(
 def test_structure_tree_nests_children(client: TestClient) -> None:
     domain = _create(client, "Struct Domain A", 1)
     process = _create(client, "Struct Process A", 3, parent_id=domain["id"])
-    tree = client.get("/api/maps/structure").json()
+    tree = client.get("/api/structure").json()
     roots = tree["roots"]
     # Find our domain among roots (other seed maps may exist)
     domain_node = next((r for r in roots if r["id"] == domain["id"]), None)

@@ -95,6 +95,8 @@ class ProcessMap(Base):
     parent_map_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("process_maps.id", ondelete="SET NULL"), default=None
     )
+    # 템플릿 맵 — True면 홈 템플릿 갤러리에서 인스턴스화 가능 (Phase B)
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False)
     # ── 서브프로세스 지정(designation) — 지정된 맵만 라이브러리 피커 노출 (spec 2026-07-06) ──
     # NULL=미지정. 값 있으면 지정 시각(플래그 겸용, KST).
     sp_designated_at: Mapped[datetime | None] = mapped_column(

@@ -26,11 +26,10 @@ from app.schemas import (
     MapCopy,
     MapCreate,
     MapDetailOut,
+    MapFromTemplate,
     MapOut,
     MapUpdate,
     OwningDepartmentIn,
-    StructureMapNodeOut,
-    StructureTreeOut,
     SubprocessDesignationIn,
 )
 from app.version_events import record_version_event
@@ -133,43 +132,41 @@ async def _assert_known_department(session: AsyncSession, dept_path: str) -> Non
         raise HTTPException(status_code=422, detail=f"unknown department: {dept_path}")
 
 
-def _build_structure_tree(maps: list[ProcessMap]) -> list[StructureMapNodeOut]:
-    """Flat visible maps → nested tree by parent_map_id (orphans with missing parent become roots)."""
-    by_id = {
-        m.id: StructureMapNodeOut(
-            id=m.id,
-            name=m.name,
-            workflow_level=m.workflow_level if m.workflow_level is not None else 3,
-            parent_map_id=m.parent_map_id,
-            children=[],
-        )
-        for m in maps
-    }
-    roots: list[StructureMapNodeOut] = []
-    for node in by_id.values():
-        pid = node.parent_map_id
-        if pid is not None and pid in by_id:
-            by_id[pid].children.append(node)
-        else:
-            roots.append(node)
-
-    def sort_rec(nodes: list[StructureMapNodeOut]) -> None:
-        nodes.sort(key=lambda n: (n.workflow_level, n.name.lower()))
-        for n in nodes:
-            sort_rec(n.children)
-
-    sort_rec(roots)
-    return roots
+# NOTE: GET /api/structure lives on app.routers.structure
+# (not under /maps/…) so it does not collide with GET /{map_id}.
 
 
-@router.get("/structure", response_model=StructureTreeOut)
-async def get_structure_tree(
+@router.get("/templates", response_model=list[MapOut])
+async def list_templates(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
-) -> StructureTreeOut:
-    """Visible maps as Domain…Task hierarchy (parent_map_id). Same visibility as list_maps."""
-    visible = await list_maps(session=session, user=user)
-    return StructureTreeOut(roots=_build_structure_tree(list(visible)))
+) -> list[ProcessMap]:
+    """Template gallery — maps marked is_template, filtered by caller access."""
+    maps = list(
+        (
+            await session.scalars(
+                select(ProcessMap)
+                .where(
+                    ProcessMap.deleted_at.is_(None),
+                    ProcessMap.is_template.is_(True),
+                )
+                .order_by(ProcessMap.name.asc())
+            )
+        ).all()
+    )
+    out: list[ProcessMap] = []
+    for m in maps:
+        role = await get_effective_role(session, user, m.id)
+        if role is None:
+            continue
+        m.my_role = role
+        m.latest_version_status = None
+        m.version_count = 0
+        m.node_count = 0
+        m.member_count = 0
+        m.owner_name = None
+        out.append(m)
+    return out
 
 
 @router.get("", response_model=list[MapOut])
@@ -362,6 +359,79 @@ async def create_map(
     for version in new_map.versions:
         await session.refresh(version, attribute_names=["events"])
     new_map.my_role = "owner"  # 생성자는 owner 권한 행 부여됨
+    return new_map
+
+
+@router.post(
+    "/{map_id}/from-template",
+    response_model=MapDetailOut,
+    status_code=201,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def instantiate_from_template(
+    map_id: int,
+    payload: MapFromTemplate,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """Create a new map from a template — clones latest version graph (any status)."""
+    source_map = await session.get(ProcessMap, map_id)
+    if source_map is None or source_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if not source_map.is_template:
+        raise HTTPException(status_code=400, detail="map is not a template")
+
+    await _assert_known_department(session, payload.owning_department)
+    await _assert_unique_name(session, payload.name)
+    level = source_map.workflow_level or 3
+    await _assert_workflow_parent(session, level, payload.parent_map_id)
+
+    source_version = (
+        await session.scalars(
+            select(MapVersion)
+            .where(MapVersion.map_id == map_id)
+            .order_by(MapVersion.id.desc())
+            .limit(1)
+            .options(
+                selectinload(MapVersion.nodes),
+                selectinload(MapVersion.edges),
+                selectinload(MapVersion.groups),
+            )
+        )
+    ).first()
+
+    new_map = ProcessMap(
+        name=payload.name,
+        description=payload.description or source_map.description,
+        created_by=user,
+        owner_id=user,
+        visibility=payload.visibility,
+        owning_department=payload.owning_department,
+        workflow_level=level,
+        parent_map_id=payload.parent_map_id,
+        is_template=False,
+    )
+    new_version = MapVersion(label="As-Is")
+    new_map.versions.append(new_version)
+    session.add(new_map)
+    await session.flush()
+    if source_version is not None:
+        await clone_graph(session, source_version, new_version.id)
+    record_version_event(session, new_version.id, "created", user)
+    session.add(
+        MapPermission(
+            map_id=new_map.id,
+            principal_type="user",
+            principal_id=user,
+            role="owner",
+            granted_by=user,
+        )
+    )
+    await session.commit()
+    await session.refresh(new_map, attribute_names=["versions"])
+    for version in new_map.versions:
+        await session.refresh(version, attribute_names=["events"])
+    new_map.my_role = "owner"
     return new_map
 
 
@@ -605,6 +675,8 @@ async def update_map(
         )
         if "parent_map_id" in fields:
             found_map.parent_map_id = payload.parent_map_id
+    if "is_template" in fields and payload.is_template is not None:
+        found_map.is_template = payload.is_template
     await session.commit()
     await session.refresh(found_map)
     return found_map

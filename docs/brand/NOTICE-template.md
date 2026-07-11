@@ -29,6 +29,6 @@ Fair-code 및 n8n 코어는 포함하지 않습니다.
 
 | Location EN | 위치 KO | Status |
 |-------------|---------|:------:|
-| Web `/legal` or settings link | 웹 고지 링크 | ⬜ |
+| Web `/legal` or settings link | 웹 고지 링크 | ✅ `/legal` + user menu |
 | Docker image `/NOTICE` | 이미지 내 NOTICE | ⬜ |
 | On-prem zip | 온프레 납품물 | ⬜ |

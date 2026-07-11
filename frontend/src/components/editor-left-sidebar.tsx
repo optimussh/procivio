@@ -271,6 +271,7 @@ export function EditorLeftSidebar({
     { keys: "] [", label: t("legend.flowHighlight") },
     { keys: "Ctrl+G", label: t("legend.createGroup") },
     { keys: "Ctrl+⇧E", label: t("legend.exportPng") },
+    { keys: "—", label: t("legend.exportPdf") },
     { keys: "1–4·E·A…", label: t("legend.menuKeys") },
   ];
   return (

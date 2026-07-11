@@ -1,4 +1,4 @@
-// 캔버스 PNG 내보내기 — React Flow 공식 권장 방식(html-to-image) (spec §7 Phase B).
+// 캔버스 PNG/PDF 내보내기 — React Flow 공식 권장 방식(html-to-image) (spec §7 Phase B).
 // html-to-image는 HTML 요소의 computed style은 인라인하지만 SVG 하위 요소는 DOM 그대로 복제한다 —
 // 스타일시트/CSS 변수 의존 엣지 stroke가 클론에서 소실되므로, 캡처 직전 엣지·화살촉에
 // 인라인 스타일(검은 실선)을 직접 심고 캡처 후 원복한다. 색상은 출력물이라 raw hex 허용(design.md §1).
@@ -19,6 +19,16 @@ interface Frame {
   x: number;
   y: number;
   zoom: number;
+}
+
+export interface PdfExportMeta {
+  title: string;
+  versionLabel?: string;
+  workflowLevel?: number;
+  levelLabel?: string;
+  description?: string;
+  exportedAt?: string;
+  appName?: string;
 }
 
 // 엣지·화살촉 인라인 보정 — 되돌리기 클로저 반환. 히트박스(edge-interaction)는 투명 유지.
@@ -52,17 +62,36 @@ function applyEdgeFixups(viewport: HTMLElement): () => void {
   };
 }
 
-// 보정을 심은 채 캡처 후 다운로드 — finally로 반드시 원복.
-async function downloadViewportPng(
+function computeFrame(nodes: Node[]): Frame | null {
+  if (nodes.length === 0) return null;
+  const bounds = getNodesBounds(nodes);
+  const width = Math.min(
+    Math.max(Math.ceil(bounds.width) + PADDING_PX * 2, MIN_SIZE_PX),
+    MAX_SIZE_PX,
+  );
+  const height = Math.min(
+    Math.max(Math.ceil(bounds.height) + PADDING_PX * 2, MIN_SIZE_PX),
+    MAX_SIZE_PX,
+  );
+  const transform = getViewportForBounds(bounds, width, height, 0.2, 2, 0.1);
+  return {
+    width,
+    height,
+    x: transform.x,
+    y: transform.y,
+    zoom: transform.zoom,
+  };
+}
+
+// 보정을 심은 채 캡처 — finally로 반드시 원복. data URL 반환.
+async function captureViewportPng(
   viewport: HTMLElement,
-  fileName: string,
   frame: Frame,
   backgroundColor: string,
-): Promise<void> {
+): Promise<string> {
   const undoFixups = applyEdgeFixups(viewport);
-  let dataUrl: string;
   try {
-    dataUrl = await toPng(viewport, {
+    return await toPng(viewport, {
       backgroundColor,
       pixelRatio: PIXEL_RATIO,
       width: frame.width,
@@ -76,6 +105,9 @@ async function downloadViewportPng(
   } finally {
     undoFixups();
   }
+}
+
+function downloadDataUrl(dataUrl: string, fileName: string): void {
   const link = document.createElement("a");
   link.href = dataUrl;
   link.download = fileName;
@@ -88,25 +120,12 @@ export async function exportCanvasPng(
   fileName: string,
 ): Promise<void> {
   const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
-  if (!viewport || nodes.length === 0) {
+  const frame = computeFrame(nodes);
+  if (!viewport || !frame) {
     return;
   }
-  const bounds = getNodesBounds(nodes);
-  const width = Math.min(
-    Math.max(Math.ceil(bounds.width) + PADDING_PX * 2, MIN_SIZE_PX),
-    MAX_SIZE_PX,
-  );
-  const height = Math.min(
-    Math.max(Math.ceil(bounds.height) + PADDING_PX * 2, MIN_SIZE_PX),
-    MAX_SIZE_PX,
-  );
-  const transform = getViewportForBounds(bounds, width, height, 0.2, 2, 0.1);
-  await downloadViewportPng(
-    viewport,
-    fileName,
-    { width, height, x: transform.x, y: transform.y, zoom: transform.zoom },
-    "#ffffff",
-  );
+  const dataUrl = await captureViewportPng(viewport, frame, "#ffffff");
+  downloadDataUrl(dataUrl, fileName);
 }
 
 /** 고정 프레임(비교 화면 등) PNG 저장 — 호출측 캔버스의 viewport를 지정 크기로 맞춰 캡처. */
@@ -121,10 +140,104 @@ export async function exportFramedPng(
   }
   const { width, height, minZoom, backgroundColor } = options;
   const transform = getViewportForBounds(getNodesBounds(nodes), width, height, minZoom, 2, 0.1);
-  await downloadViewportPng(
+  const dataUrl = await captureViewportPng(
     viewport,
-    fileName,
     { width, height, x: transform.x, y: transform.y, zoom: transform.zoom },
     backgroundColor,
   );
+  downloadDataUrl(dataUrl, fileName);
+}
+
+/**
+ * PDF 내보내기 — 표지(메타) + 맵 이미지 페이지.
+ * jspdf 동적 import. 노드 없으면 표지만 저장.
+ */
+export async function exportCanvasPdf(
+  nodes: Node[],
+  fileName: string,
+  meta: PdfExportMeta,
+): Promise<void> {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "pt",
+    format: "a4",
+  });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const appName = meta.appName ?? "Procivio";
+  const exportedAt =
+    meta.exportedAt ??
+    new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+
+  // ── Cover page ──
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(80, 80, 80);
+  doc.text(appName, margin, margin);
+
+  doc.setFontSize(22);
+  doc.setTextColor(20, 20, 20);
+  const titleLines = doc.splitTextToSize(meta.title || "Process Map", pageW - margin * 2);
+  doc.text(titleLines, margin, margin + 36);
+
+  let y = margin + 36 + titleLines.length * 26 + 12;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(50, 50, 50);
+
+  const rows: Array<[string, string]> = [
+    ["Version", meta.versionLabel || "—"],
+    [
+      "Level",
+      meta.levelLabel ||
+        (meta.workflowLevel != null ? `L${meta.workflowLevel}` : "—"),
+    ],
+    ["Exported", exportedAt],
+  ];
+  for (const [label, value] of rows) {
+    doc.setFont("helvetica", "bold");
+    doc.text(`${label}:`, margin, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(String(value), margin + 80, y);
+    y += 18;
+  }
+
+  if (meta.description?.trim()) {
+    y += 10;
+    doc.setFont("helvetica", "bold");
+    doc.text("Description", margin, y);
+    y += 16;
+    doc.setFont("helvetica", "normal");
+    const descLines = doc.splitTextToSize(meta.description.trim(), pageW - margin * 2);
+    doc.text(descLines, margin, y);
+  }
+
+  doc.setFontSize(9);
+  doc.setTextColor(140, 140, 140);
+  doc.text(`${appName} · Process knowledge map`, margin, pageH - 24);
+
+  // ── Map page ──
+  const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
+  const frame = computeFrame(nodes);
+  if (viewport && frame) {
+    const dataUrl = await captureViewportPng(viewport, frame, "#ffffff");
+    doc.addPage();
+    const maxW = pageW - margin * 2;
+    const maxH = pageH - margin * 2 - 24;
+    const scale = Math.min(maxW / frame.width, maxH / frame.height, 1);
+    const imgW = frame.width * scale;
+    const imgH = frame.height * scale;
+    const ox = margin + (maxW - imgW) / 2;
+    const oy = margin + 12 + (maxH - imgH) / 2;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    doc.text(meta.title || "Map", margin, margin);
+    doc.addImage(dataUrl, "PNG", ox, oy, imgW, imgH);
+  }
+
+  const safeName = fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`;
+  doc.save(safeName);
 }

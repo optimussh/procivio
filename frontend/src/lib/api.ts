@@ -67,6 +67,8 @@ export interface MapSummary {
   // 워크플로 레벨 1..5 Domain…Task (process-level-taxonomy)
   workflow_level?: number;
   parent_map_id?: number | null;
+  // 템플릿 갤러리 노출 (Phase B)
+  is_template?: boolean;
 }
 
 export interface MapDetail extends MapSummary {
@@ -218,7 +220,8 @@ export interface StructureMapNode {
 }
 
 export function getStructureTree(): Promise<{ roots: StructureMapNode[] }> {
-  return request<{ roots: StructureMapNode[] }>("/maps/structure");
+  // /api/structure — not /maps/structure (would be captured by /maps/{map_id} as string "structure")
+  return request<{ roots: StructureMapNode[] }>("/structure");
 }
 
 export function updateMap(
@@ -228,11 +231,34 @@ export function updateMap(
     description?: string;
     workflow_level?: number;
     parent_map_id?: number | null;
+    is_template?: boolean;
   },
 ): Promise<MapSummary> {
   return request<MapSummary>(`/maps/${mapId}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
+  });
+}
+
+/** Template gallery — maps with is_template=true the caller can access. */
+export function listTemplates(): Promise<MapSummary[]> {
+  return request<MapSummary[]>("/maps/templates");
+}
+
+/** Instantiate a new map from a template (clones latest version graph). */
+export function createFromTemplate(
+  templateId: number,
+  body: {
+    name: string;
+    owning_department: string;
+    description?: string;
+    visibility?: MapSummary["visibility"];
+    parent_map_id?: number | null;
+  },
+): Promise<MapDetail> {
+  return request<MapDetail>(`/maps/${templateId}/from-template`, {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 }
 

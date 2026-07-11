@@ -178,7 +178,8 @@ import {
   type VersionSummary,
   type WorkflowState,
 } from "@/lib/api";
-import { exportCanvasPng } from "@/lib/export";
+import { exportCanvasPdf, exportCanvasPng } from "@/lib/export";
+import { levelBadge } from "@/lib/workflow-levels";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
@@ -641,9 +642,11 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
 }
 
 function MapEditor({ mapId }: { mapId: number }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const router = useRouter();
   const [mapName, setMapName] = useState("");
+  const [mapDescription, setMapDescription] = useState("");
+  const [mapWorkflowLevel, setMapWorkflowLevel] = useState<number>(3);
   const [versions, setVersions] = useState<VersionSummary[]>([]);
   // 승인 트랜지션 시 bump — 하단 버전 기록(MapDetailCard) 재조회 트리거 / bump to refresh version record.
   const [versionsReloadKey, setVersionsReloadKey] = useState(0);
@@ -1879,6 +1882,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           return;
         }
         setMapName(detail.name);
+        setMapDescription(detail.description ?? "");
+        setMapWorkflowLevel(detail.workflow_level ?? 3);
         setMapOwner(detail.created_by);
         setMyRole(detail.my_role);
         setVersions(detail.versions);
@@ -4287,6 +4292,31 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
   }, [versions, versionId, mapName, t]);
 
+  const handleExportPdf = useCallback(async () => {
+    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
+    const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[-:T]/g, "")
+      .slice(0, 14);
+    try {
+      await exportCanvasPdf(
+        nodesRef.current,
+        `${sanitize(mapName)}_${sanitize(versionLabel)}_${stamp}.pdf`,
+        {
+          title: mapName,
+          versionLabel,
+          workflowLevel: mapWorkflowLevel,
+          levelLabel: levelBadge(mapWorkflowLevel ?? 3, lang),
+          description: mapDescription,
+          appName: t("app.name"),
+        },
+      );
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.exportPdf"));
+    }
+  }, [versions, versionId, mapName, mapWorkflowLevel, mapDescription, lang, t]);
+
   // ── 컨텍스트 메뉴 ─────────────────────────────────────
 
   const openMenu = useCallback(
@@ -4404,6 +4434,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             icon: Download,
             shortcut: "Ctrl+⇧E",
             onSelect: () => void handleExportPng(),
+          },
+          {
+            label: t("ctx.exportPdf"),
+            icon: Download,
+            onSelect: () => void handleExportPdf(),
           },
         ],
       };
@@ -4642,6 +4677,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleRecolor,
     applyNodesTransform,
     handleExportPng,
+    handleExportPdf,
     createGroupFromSelection,
     disbandGroup,
     groups,
@@ -6078,6 +6114,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     applyAutoLayout,
     createGroupFromSelection,
     handleExportPng,
+    handleExportPdf,
   ]);
 
   // 포인터 화면 좌표 추적 — 엣지 액션/분기 모달을 마우스 위치에 띄우기 위함.
@@ -7783,14 +7820,25 @@ function MapEditor({ mapId }: { mapId: number }) {
                       disabledReason={spDisabledReason}
                       onToast={showToast}
                     />
-                    <button
-                      type="button"
-                      onClick={() => void handleExportPng()}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                    >
-                      <Download size={16} strokeWidth={1.5} />
-                      {t("inspector.exportPng")}
-                    </button>
+                    <div className="flex flex-col gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => void handleExportPng()}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <Download size={16} strokeWidth={1.5} />
+                        {t("inspector.exportPng")}
+                      </button>
+                      <button
+                        type="button"
+                        data-id="export-pdf-btn"
+                        onClick={() => void handleExportPdf()}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink hover:bg-surface-alt"
+                      >
+                        <Download size={16} strokeWidth={1.5} />
+                        {t("inspector.exportPdf")}
+                      </button>
+                    </div>
                   </div>
                 }
                 approvalSlot={

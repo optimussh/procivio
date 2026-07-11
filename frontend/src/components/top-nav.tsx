@@ -191,6 +191,16 @@ export function TopNav() {
                 <button
                   type="button"
                   className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                  onClick={() => {
+                    setOpen(false);
+                    router.push("/legal");
+                  }}
+                >
+                  {t("nav.legal")}
+                </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
                   onClick={() => void onLogout()}
                 >
                   {t("nav.logout")}

@@ -17,6 +17,7 @@ import { useI18n } from "@/lib/i18n";
 import type { MapRole } from "@/lib/mock/permissions";
 import type { MatchRange } from "@/lib/search";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
+import { levelBadge } from "@/lib/workflow-levels";
 
 interface MapCardProps {
   map: MapSummary;
@@ -38,7 +39,7 @@ export function MapCard({
   highlighted = false,
   recentOpenedAt,
 }: MapCardProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   // 마운트 시점 1회 — 렌더 중 Date.now() 호출은 순수성 규칙 위반이라 상태로 고정 (상대 시각 기준)
   const [now] = useState(() => Date.now());
   // 상대 시각 — "방금 / N분 전 / N시간 전 / N일 전", 30일↑은 절대 날짜 (브라우저=KST 가정, formatKst와 동일)
@@ -172,10 +173,18 @@ export function MapCard({
           {map.workflow_level != null && (
             <span
               data-id="map-card-workflow-level"
-              title="L1 Domain/도메인 … L5 Task/태스크"
+              title={levelBadge(map.workflow_level, lang)}
               className="shrink-0 rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary"
             >
-              {`L${map.workflow_level}`}
+              {levelBadge(map.workflow_level, lang)}
+            </span>
+          )}
+          {map.is_template && (
+            <span
+              data-id="map-card-template-badge"
+              className="shrink-0 rounded-sm border border-accent/30 bg-accent-tint px-1.5 py-0.5 text-fine text-accent"
+            >
+              {t("home.templateBadge")}
             </span>
           )}
         </div>

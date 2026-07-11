@@ -34,6 +34,7 @@ from app.routers import (
     notices,
     notifications,
     permissions,
+    structure,
     versions,
 )
 from app.schemas import MeOut
@@ -60,6 +61,7 @@ app.include_router(ai_sessions.router)
 app.include_router(app_settings.router)
 app.include_router(embed.router)
 app.include_router(maps.router)
+app.include_router(structure.router)  # /api/structure — before maps/{id} collision risk
 app.include_router(versions.router)
 app.include_router(checkout.router)
 app.include_router(graph.router)

@@ -16,7 +16,11 @@
 | 7 | Inquire browser smoke | Inquire 브라우저 스모크 | ⬜ manual |
 | 8 | Taxonomy L1–L5 | 레벨 택소노미 | ✅ |
 | 8a–8f | Structure API/UI, parent, performer | 구조 트리·parent·수행주체 | ✅ |
-| **B** | Phase B deliverables | PDF·템플릿·필터 등 | ⬜ spec only |
+| **B** | Phase B deliverables | PDF·템플릿·필터 등 | ✅ |
+| B1 | PDF export cover+map | PDF 내보내기 | ✅ |
+| B2 | Template maps | 템플릿 맵 | ✅ |
+| B3 | Home filter by level | 홈 레벨 필터 | ✅ |
+| B4 | `/legal` NOTICE page | 고지 페이지 | ✅ |
 | **C** | Runtime adapters | Temporal/Argo 등 | ⬜ later |
 
 ---

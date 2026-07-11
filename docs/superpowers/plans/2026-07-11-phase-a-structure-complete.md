@@ -30,7 +30,7 @@
 
 ### Later Phase B / 이후
 
-- [ ] PDF export  
-- [ ] Templates  
-- [ ] Home level filter  
-- [ ] `/legal` NOTICE page  
+- [x] PDF export  
+- [x] Templates  
+- [x] Home level filter  
+- [x] `/legal` NOTICE page  
