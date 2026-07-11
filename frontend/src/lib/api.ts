@@ -442,6 +442,39 @@ export function getFullGraph(versionId: number): Promise<VersionGraph> {
   return request<VersionGraph>(`/versions/${versionId}/graph/all`);
 }
 
+/** BPMN 2.0 subset XML 다운로드 (P1) */
+export async function downloadBpmnExport(versionId: number, fileName?: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  } else if (devUser) {
+    headers["X-Dev-User"] = devUser;
+  }
+  const response = await fetch(`/api/versions/${versionId}/export/bpmn`, { headers });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new ApiError(
+      `API GET /versions/${versionId}/export/bpmn failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      response.status,
+    );
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName ?? `process-v${versionId}.bpmn`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** BPMN XML → Graph (서버 파싱만, 저장 안 함) */
+export function parseBpmnImport(versionId: number, xml: string): Promise<Graph> {
+  return request<Graph>(`/versions/${versionId}/import/bpmn`, {
+    method: "POST",
+    body: JSON.stringify({ xml }),
+  });
+}
+
 // ── 체크아웃 / 코멘트 (spec §7 Phase C) ──────────────────
 
 export interface CheckoutState {

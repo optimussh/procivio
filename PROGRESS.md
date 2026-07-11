@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — BPMN 2.0 subset export/import (P1) (feat/interview-transcript-map)
+- `app/bpmn_io.py` — graph↔BPMN XML (start/end/task/gateway/callActivity + DI)
+- `GET .../export/bpmn`, `POST .../import/bpmn` (파싱만, 저장은 에디터 PUT)
+- 캔버스 메뉴 More: Export BPMN / Import BPMN; pytest `test_bpmn_io` 3종
+
 ## 2026-07-11 — Interview transcript → map (P0) (feat/interview-transcript-map)
 - 설계·계획: `docs/superpowers/specs/2026-07-11-interview-transcript-map-design.md`, `plans/2026-07-11-interview-transcript-map.md`
 - API `POST /versions/{id}/ai/from-transcript` — 80~max chars, 체크아웃 필수, 원문 미저장, graph 초안 + self-repair

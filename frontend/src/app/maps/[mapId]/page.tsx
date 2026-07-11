@@ -178,6 +178,8 @@ import {
   type VersionGraph,
   type VersionSummary,
   type WorkflowState,
+  downloadBpmnExport,
+  parseBpmnImport,
 } from "@/lib/api";
 import { exportCanvasPdf, exportCanvasPng } from "@/lib/export";
 import { levelBadge } from "@/lib/workflow-levels";
@@ -4368,6 +4370,35 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
   }, [versions, versionId, mapName, mapWorkflowLevel, mapDescription, lang, t]);
 
+  const handleExportBpmn = useCallback(async () => {
+    if (versionId == null) return;
+    const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
+    try {
+      await downloadBpmnExport(versionId, `${sanitize(mapName)}-v${versionId}.bpmn`);
+      showToast(t("ctx.exportBpmnDone"));
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.exportBpmn"));
+    }
+  }, [versionId, mapName, showToast, t]);
+
+  const handleImportBpmnFile = useCallback(
+    async (file: File) => {
+      if (versionId == null || readOnly) return;
+      try {
+        const xml = await file.text();
+        const graph = await parseBpmnImport(versionId, xml);
+        setNodes(toAppNodes(graph, null));
+        setEdges(toAppEdges(graph));
+        setGroups([]);
+        scheduleAutoSave();
+        showToast(t("ctx.importBpmnDone", { n: graph.nodes.length }));
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : t("err.importBpmn"));
+      }
+    },
+    [versionId, readOnly, setNodes, setEdges, setGroups, scheduleAutoSave, showToast, t],
+  );
+
   // ── 컨텍스트 메뉴 ─────────────────────────────────────
 
   const openMenu = useCallback(
@@ -4491,6 +4522,29 @@ function MapEditor({ mapId }: { mapId: number }) {
             icon: Download,
             onSelect: () => void handleExportPdf(),
           },
+          {
+            label: t("ctx.exportBpmn"),
+            icon: Download,
+            onSelect: () => void handleExportBpmn(),
+          },
+          ...(!readOnly
+            ? [
+                {
+                  label: t("ctx.importBpmn"),
+                  icon: Upload,
+                  onSelect: () => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = ".bpmn,.xml,application/xml,text/xml";
+                    input.onchange = () => {
+                      const f = input.files?.[0];
+                      if (f) void handleImportBpmnFile(f);
+                    };
+                    input.click();
+                  },
+                } as ContextMenuItem,
+              ]
+            : []),
         ],
       };
       if (readOnly) {
@@ -4765,6 +4819,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     applyNodesTransform,
     handleExportPng,
     handleExportPdf,
+    handleExportBpmn,
+    handleImportBpmnFile,
     createGroupFromSelection,
     disbandGroup,
     groups,

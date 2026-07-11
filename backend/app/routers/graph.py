@@ -1,19 +1,25 @@
 """Canvas graph read / full-replace, flat per version (docs/spec.md §1, §3.1).
 
 그래프는 version 단위 평면 저장. GET/PUT /versions/{id}/graph 가 버전 전체를 다룬다.
+BPMN 2.0 subset export/import — app.bpmn_io (P1).
 """
 
+import xml.etree.ElementTree as ET
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
+from app.bpmn_io import bpmn_xml_to_graph, graph_to_bpmn_xml
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.subprocess import assert_no_cycle, get_subprocess_refs, validate_process
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
-from app.models import Comment, Edge, Group, MapVersion, Node
+from app.models import Comment, Edge, Group, MapVersion, Node, ProcessMap
 from app.permissions.deps import require_version_map_role
 from app.schemas import (
     EdgeIn,
@@ -119,6 +125,56 @@ async def get_graph(
 ) -> GraphOut:
     await _get_version_or_404(session, version_id)
     return await _load_graph(session, version_id)
+
+
+@router.get(
+    "/{version_id}/export/bpmn",
+    dependencies=[Depends(require_version_map_role("viewer"))],
+)
+async def export_bpmn(
+    version_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """BPMN 2.0 subset XML download (P1)."""
+    version = await _get_version_or_404(session, version_id)
+    graph = await _load_graph(session, version_id)
+    pmap = await session.get(ProcessMap, version.map_id)
+    name = (pmap.name if pmap else "Process") or "Process"
+    xml = graph_to_bpmn_xml(graph, process_name=name)
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)[:80] or "process"
+    return Response(
+        content=xml.encode("utf-8"),
+        media_type="application/xml; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe}-v{version_id}.bpmn"',
+        },
+    )
+
+
+class BpmnImportIn(BaseModel):
+    """BPMN XML body — parse only; client applies via PUT /graph after review."""
+
+    xml: str = Field(min_length=20, max_length=2_000_000)
+
+
+@router.post(
+    "/{version_id}/import/bpmn",
+    response_model=GraphOut,
+    dependencies=[Depends(require_version_map_role("editor"))],
+)
+async def import_bpmn_parse(
+    version_id: int,
+    payload: BpmnImportIn,
+    session: AsyncSession = Depends(get_session),
+) -> GraphOut:
+    """Parse BPMN subset → GraphOut (does not persist; editor merges/applies)."""
+    await _get_version_or_404(session, version_id)
+    try:
+        return bpmn_xml_to_graph(payload.xml)
+    except ET.ParseError as exc:
+        raise HTTPException(status_code=400, detail=f"invalid BPMN XML: {exc}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put(

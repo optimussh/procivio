@@ -238,8 +238,8 @@ LLM에게 **좌표·BPMN XML을 직접 만들지 않는다.** 배치는 dagre �
 
 | ID | 항목 |
 |----|------|
-| P1 | BPMN 2.0 XML export 서브셋 (Task, XOR, sequence, start/end + DI) |
-| P1b | BPMN 서브셋 import |
+| P1 | BPMN 2.0 XML export 서브셋 (Task, XOR, sequence, start/end + DI) — **구현됨** `bpmn_io` + GET export |
+| P1b | BPMN 서브셋 import — **구현됨** POST import/bpmn + 에디터 메뉴 |
 | P2 | 트랜스크립트 두 번 생성으로 As-Is / To-Be 나란히 비교 |
 | P3 | 다수 이해관계자 가이드 인터뷰 수집 |
 | P4 | 마이닝·이벤트 로그 |
