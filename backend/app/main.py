@@ -28,6 +28,7 @@ from app.routers import (
     graph,
     groups,
     inbox,
+    interview,
     library,
     manual,
     maps,
@@ -58,6 +59,7 @@ app = FastAPI(title="BPM API", lifespan=lifespan)
 app.include_router(admin.router)
 app.include_router(ai.router)
 app.include_router(ai_sessions.router)
+app.include_router(interview.router)
 app.include_router(app_settings.router)
 app.include_router(embed.router)
 app.include_router(maps.router)

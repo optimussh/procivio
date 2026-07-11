@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
 from app.bpmn_io import bpmn_xml_to_graph, graph_to_bpmn_xml
+from app.mining import event_log_csv_to_graph
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.subprocess import assert_no_cycle, get_subprocess_refs, validate_process
@@ -173,6 +174,30 @@ async def import_bpmn_parse(
         return bpmn_xml_to_graph(payload.xml)
     except ET.ParseError as exc:
         raise HTTPException(status_code=400, detail=f"invalid BPMN XML: {exc}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class EventLogImportIn(BaseModel):
+    """CSV event log text (case_id, activity, timestamp?)."""
+
+    csv: str = Field(min_length=10, max_length=5_000_000)
+
+
+@router.post(
+    "/{version_id}/import/event-log",
+    response_model=GraphOut,
+    dependencies=[Depends(require_version_map_role("editor"))],
+)
+async def import_event_log(
+    version_id: int,
+    payload: EventLogImportIn,
+    session: AsyncSession = Depends(get_session),
+) -> GraphOut:
+    """P4 mining MVP — DFG from event log CSV → GraphOut (not persisted)."""
+    await _get_version_or_404(session, version_id)
+    try:
+        return event_log_csv_to_graph(payload.csv)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

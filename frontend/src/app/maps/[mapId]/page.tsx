@@ -180,6 +180,7 @@ import {
   type WorkflowState,
   downloadBpmnExport,
   parseBpmnImport,
+  parseEventLogImport,
 } from "@/lib/api";
 import { exportCanvasPdf, exportCanvasPng } from "@/lib/export";
 import { levelBadge } from "@/lib/workflow-levels";
@@ -4399,6 +4400,24 @@ function MapEditor({ mapId }: { mapId: number }) {
     [versionId, readOnly, setNodes, setEdges, setGroups, scheduleAutoSave, showToast, t],
   );
 
+  const handleImportEventLogFile = useCallback(
+    async (file: File) => {
+      if (versionId == null || readOnly) return;
+      try {
+        const csv = await file.text();
+        const graph = await parseEventLogImport(versionId, csv);
+        setNodes(toAppNodes(graph, null));
+        setEdges(toAppEdges(graph));
+        setGroups([]);
+        scheduleAutoSave();
+        showToast(t("ctx.importEventLogDone", { n: graph.nodes.length }));
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : t("err.importEventLog"));
+      }
+    },
+    [versionId, readOnly, setNodes, setEdges, setGroups, scheduleAutoSave, showToast, t],
+  );
+
   // ── 컨텍스트 메뉴 ─────────────────────────────────────
 
   const openMenu = useCallback(
@@ -4539,6 +4558,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                     input.onchange = () => {
                       const f = input.files?.[0];
                       if (f) void handleImportBpmnFile(f);
+                    };
+                    input.click();
+                  },
+                } as ContextMenuItem,
+                {
+                  label: t("ctx.importEventLog"),
+                  icon: Upload,
+                  onSelect: () => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = ".csv,text/csv";
+                    input.onchange = () => {
+                      const f = input.files?.[0];
+                      if (f) void handleImportEventLogFile(f);
                     };
                     input.click();
                   },
@@ -4821,6 +4854,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleExportPdf,
     handleExportBpmn,
     handleImportBpmnFile,
+    handleImportEventLogFile,
     createGroupFromSelection,
     disbandGroup,
     groups,

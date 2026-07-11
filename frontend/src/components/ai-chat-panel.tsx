@@ -27,11 +27,13 @@ import { MarkdownView } from "@/components/markdown-view";
 import {
   aiChat,
   aiFromTranscript,
+  createInterviewCampaign,
   deleteAiChatSession,
   getAiChatMessages,
   getAiChatSessions,
   getAiModels,
   getAiTips,
+  isTranscriptPair,
   INQUIRE_GENERATE_TOKEN,
   INQUIRE_START_TOKEN,
   type AiChatSessionSummary,
@@ -449,7 +451,7 @@ export function AiChatPanel({
 
   const TRANSCRIPT_MIN = 80;
 
-  const generateFromTranscript = async () => {
+  const generateFromTranscript = async (variant: string = "single") => {
     const text = transcript.trim();
     if (!aiEnabled || busy || isForeign || !canEdit) return;
     if (text.length < TRANSCRIPT_MIN) {
@@ -460,35 +462,61 @@ export function AiChatPanel({
     const targetSessionId = activeSessionId;
     const userMessage = createLocalMessage(
       "user",
-      t("ai.transcript.userBubble", { n: text.length }),
+      t("ai.transcript.userBubble", { n: text.length }) +
+        (variant !== "single" ? ` [${variant}]` : ""),
     );
     setMessages((prev) => [...prev, userMessage]);
     try {
-      const proposal = await aiFromTranscript(versionId, {
+      const result = await aiFromTranscript(versionId, {
         transcript: text,
         focus: transcriptFocus.trim(),
         industry_hint: industryHint === "none" ? "" : industryHint,
         session_id: targetSessionId,
         model: model || null,
+        variant,
       });
-      const content = proposal.message || t("ai.unsupportedKind");
-      if (activeSessionIdRef.current === targetSessionId) {
-        setMessages((prev) => [
-          ...prev,
-          createLocalMessage("assistant", content, proposal.kind, toPayload(proposal)),
-        ]);
+      if (isTranscriptPair(result)) {
+        if (activeSessionIdRef.current === targetSessionId) {
+          setMessages((prev) => [
+            ...prev,
+            createLocalMessage(
+              "assistant",
+              result.message || t("ai.transcript.pairReady"),
+              "graph",
+              {
+                pair: true,
+                as_is: toPayload(result.as_is) ?? undefined,
+                to_be: toPayload(result.to_be) ?? undefined,
+              },
+            ),
+          ]);
+        }
+        // Apply As-Is to preview first; user can re-generate To-Be or click second apply via toast
+        if (result.as_is.kind === "graph") onGraphProposal(result.as_is);
+        onToast?.(t("ai.transcript.pairHint"));
+        // stash to_be for second apply
+        (window as unknown as { __procivioToBe?: AiProposal }).__procivioToBe = result.to_be;
+      } else {
+        const proposal = result;
+        const content = proposal.message || t("ai.unsupportedKind");
+        if (activeSessionIdRef.current === targetSessionId) {
+          setMessages((prev) => [
+            ...prev,
+            createLocalMessage("assistant", content, proposal.kind, toPayload(proposal)),
+          ]);
+        }
+        if (proposal.kind === "graph") {
+          onGraphProposal(proposal);
+        }
       }
       if (
         targetSessionId === null &&
-        proposal.session_id != null &&
+        result.session_id != null &&
         activeSessionIdRef.current === targetSessionId
       ) {
-        setActiveSessionId(proposal.session_id);
+        setActiveSessionId(result.session_id);
       }
       refreshSessions();
-      if (proposal.kind === "graph") {
-        onGraphProposal(proposal);
-      }
     } catch (err) {
       if (activeSessionIdRef.current === targetSessionId) {
         setMessages((prev) => [
@@ -501,6 +529,21 @@ export function AiChatPanel({
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  const createCollectLink = async () => {
+    try {
+      const camp = await createInterviewCampaign(mapId);
+      const url = `${window.location.origin}${camp.share_path}`;
+      await navigator.clipboard?.writeText(url).catch(() => undefined);
+      onToast?.(t("interview.linkCreated", { url }));
+      setMessages((prev) => [
+        ...prev,
+        createLocalMessage("assistant", t("interview.linkCreated", { url })),
+      ]);
+    } catch (err) {
+      onToast?.(err instanceof Error ? err.message : t("interview.loadError"));
     }
   };
 
@@ -650,22 +693,63 @@ export function AiChatPanel({
               <option value="battery">{t("ai.transcript.industryBattery")}</option>
             </select>
           </div>
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-fine text-ink-tertiary">
               {t("ai.transcript.chars", { n: transcript.trim().length })}
             </span>
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                data-id="ai-transcript-generate"
+                disabled={
+                  busy || !canEdit || isForeign || transcript.trim().length < TRANSCRIPT_MIN
+                }
+                onClick={() => void generateFromTranscript("single")}
+                className="rounded-full bg-accent px-3 py-1 text-fine font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-50"
+              >
+                {busy ? t("ai.thinking") : t("ai.transcript.generate")}
+              </button>
+              <button
+                type="button"
+                data-id="ai-transcript-pair"
+                disabled={
+                  busy || !canEdit || isForeign || transcript.trim().length < TRANSCRIPT_MIN
+                }
+                onClick={() => void generateFromTranscript("pair")}
+                className="rounded-full border border-accent px-3 py-1 text-fine font-semibold text-accent hover:bg-accent-tint disabled:opacity-50"
+                title={t("ai.transcript.pairTitle")}
+              >
+                {t("ai.transcript.pair")}
+              </button>
+              <button
+                type="button"
+                data-id="ai-transcript-tobe-apply"
+                disabled={busy || !canEdit}
+                onClick={() => {
+                  const tb = (window as unknown as { __procivioToBe?: AiProposal }).__procivioToBe;
+                  if (tb?.kind === "graph") {
+                    onGraphProposal(tb);
+                    onToast?.(t("ai.transcript.toBeApplied"));
+                  } else {
+                    onToast?.(t("ai.transcript.noToBe"));
+                  }
+                }}
+                className="rounded-full border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt"
+              >
+                {t("ai.transcript.applyToBe")}
+              </button>
+            </div>
+          </div>
+          {canEdit && (
             <button
               type="button"
-              data-id="ai-transcript-generate"
-              disabled={
-                busy || !canEdit || isForeign || transcript.trim().length < TRANSCRIPT_MIN
-              }
-              onClick={() => void generateFromTranscript()}
-              className="rounded-full bg-accent px-3 py-1 text-fine font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-50"
+              data-id="ai-interview-collect"
+              onClick={() => void createCollectLink()}
+              className="self-start text-fine text-accent hover:underline"
             >
-              {busy ? t("ai.thinking") : t("ai.transcript.generate")}
+              {t("interview.createLink")}
             </button>
-          </div>
+          )}
         </div>
       )}
       {/* 대화 전환 바 — 현재 맵의 서버 세션 드롭다운 + 새 대화(지연 생성). */}

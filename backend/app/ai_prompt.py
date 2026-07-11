@@ -387,6 +387,7 @@ def build_transcript_generate_messages(
     transcript: str,
     focus: str = "",
     industry_hint: str = "",
+    variant: str = "single",
 ) -> list[dict]:
     """회의록·인터뷰 전문 → kind=graph 전용 메시지 (design 2026-07-11)."""
     hint_key = (industry_hint or "").strip().lower()
@@ -395,8 +396,22 @@ def build_transcript_generate_messages(
         hint_line = f"도메인 힌트(사용자): {industry_hint.strip()[:200]}"
     focus_line = f"초점: {focus.strip()}\n" if focus.strip() else ""
     extra = f"{hint_line}\n" if hint_line else ""
+    v = (variant or "single").strip().lower()
+    if v == "as_is":
+        mode_line = (
+            "모드: As-Is(현재 상태). 지금 실제로 하는 흐름만 맵으로 그리세요. "
+            "개선안·미래 제안은 제외하세요.\n"
+        )
+    elif v == "to_be":
+        mode_line = (
+            "모드: To-Be(목표 상태). 개선·자동화·간소화가 반영된 목표 프로세스를 맵으로 그리세요. "
+            "현재 병목은 해소한 흐름으로 표현하세요.\n"
+        )
+    else:
+        mode_line = ""
     user = (
         "다음 인터뷰·회의 텍스트만 근거로 프로세스맵 JSON(kind=graph)을 만드세요.\n"
+        f"{mode_line}"
         "텍스트에 없는 담당자·시스템·단계를 지어내지 마세요(명시되지 않으면 빈 문자열).\n"
         "node_type은 start|process|decision|end 만. subprocess 노드는 만들지 마세요.\n"
         "process 노드는 가능하면 5~15개. decision은 분기 라벨을 달으세요.\n"

@@ -581,3 +581,36 @@ class AiUsageEvent(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class InterviewCampaign(Base):
+    """다수 현업 인터뷰 수집 캠페인 (P3) — 공유 토큰으로 응답 수집."""
+
+    __tablename__ = "interview_campaigns"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
+    # 공개 링크용 토큰 (URL-safe)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(200), default="Process interview")
+    # 문항 목록 JSON: [{"id":"scope","prompt":"..."}, ...]
+    questions: Mapped[list] = mapped_column(JSON, default=list)
+    created_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # open | closed
+    status: Mapped[str] = mapped_column(String(20), default="open")
+
+
+class InterviewResponse(Base):
+    """캠페인 1건 응답 — 현업이 토큰 링크로 제출."""
+
+    __tablename__ = "interview_responses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("interview_campaigns.id", ondelete="CASCADE"), index=True
+    )
+    respondent_name: Mapped[str] = mapped_column(String(200), default="")
+    # {question_id: answer_text}
+    answers: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

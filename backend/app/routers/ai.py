@@ -40,6 +40,7 @@ from app.schemas import (
     AiModelsOut,
     AiProposal,
     AiTipsOut,
+    AiTranscriptPairOut,
     AiTranscriptRequest,
 )
 from app.settings import settings
@@ -354,7 +355,7 @@ async def ai_chat(
 
 @router.post(
     "/versions/{version_id}/ai/from-transcript",
-    response_model=AiProposal,
+    response_model=None,
     dependencies=[Depends(require_version_map_role("viewer"))],
 )
 async def ai_from_transcript(
@@ -362,7 +363,7 @@ async def ai_from_transcript(
     payload: AiTranscriptRequest,
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> AiProposal:
+) -> AiProposal | AiTranscriptPairOut:
     """회의록·인터뷰 전문 → kind=graph 초안 (design 2026-07-11).
 
     원문 트랜스크립트는 채팅 메시지·usage 이벤트에 저장하지 않는다(요약·글자 수만).
@@ -415,58 +416,22 @@ async def ai_from_transcript(
     manual_text = select_manual_sections(
         await _load_manual_text(session), select_q, _MANUAL_SELECT_BUDGET
     )
-    messages = build_transcript_generate_messages(
-        manual=manual_text,
-        current_graph=current,
-        can_edit=can_edit,
-        transcript=text,
-        focus=payload.focus,
-        industry_hint=payload.industry_hint,
-    )
-    try:
-        proposal, usage = await _ask_and_validate(messages, payload.model)
-    except HTTPException as exc:
-        totals = getattr(exc, "usage_totals", None)
-        try:
-            session.add(
-                AiUsageEvent(
-                    login_id=user,
-                    map_id=version.map_id,
-                    version_id=version_id,
-                    model=payload.model or "",
-                    kind=None,
-                    prompt_tokens=getattr(totals, "prompt_tokens", None),
-                    completion_tokens=getattr(totals, "completion_tokens", None),
-                    ok=False,
-                )
-            )
-            await session.commit()
-        except Exception:  # noqa: BLE001
-            await session.rollback()
-            logger.warning("AI usage event insert failed (transcript failure path)")
-        raise
+    variant = (payload.variant or "single").strip().lower()
+    if variant not in ("single", "as_is", "to_be", "pair"):
+        raise HTTPException(status_code=400, detail="variant must be single|as_is|to_be|pair")
 
-    # graph 아니면 1회 강제 재생성 (self-repair)
-    if proposal.kind != "graph" or not proposal.nodes:
-        repair = [
-            *messages,
-            {
-                "role": "user",
-                "content": (
-                    "이전 출력이 유효한 kind=graph 가 아닙니다. "
-                    "반드시 kind=graph JSON 한 개만, start/process/end 포함."
-                ),
-            },
-        ]
+    async def _one(v: str) -> tuple[AiProposal, AiUsageTotals]:
+        messages = build_transcript_generate_messages(
+            manual=manual_text,
+            current_graph=current,
+            can_edit=can_edit,
+            transcript=text,
+            focus=payload.focus,
+            industry_hint=payload.industry_hint,
+            variant=v if v != "single" else "single",
+        )
         try:
-            proposal, usage2 = await _ask_and_validate(repair, payload.model)
-            usage.add(
-                ai_client.AiReply(
-                    content="",
-                    prompt_tokens=usage2.prompt_tokens,
-                    completion_tokens=usage2.completion_tokens,
-                )
-            )
+            proposal, usage = await _ask_and_validate(messages, payload.model)
         except HTTPException as exc:
             totals = getattr(exc, "usage_totals", None)
             try:
@@ -485,17 +450,111 @@ async def ai_from_transcript(
                 await session.commit()
             except Exception:  # noqa: BLE001
                 await session.rollback()
+                logger.warning("AI usage event insert failed (transcript failure path)")
             raise
+        if proposal.kind != "graph" or not proposal.nodes:
+            repair = [
+                *messages,
+                {
+                    "role": "user",
+                    "content": (
+                        "이전 출력이 유효한 kind=graph 가 아닙니다. "
+                        "반드시 kind=graph JSON 한 개만, start/process/end 포함."
+                    ),
+                },
+            ]
+            proposal, usage2 = await _ask_and_validate(repair, payload.model)
+            usage.add(
+                ai_client.AiReply(
+                    content="",
+                    prompt_tokens=usage2.prompt_tokens,
+                    completion_tokens=usage2.completion_tokens,
+                )
+            )
+        if proposal.kind != "graph":
+            proposal = AiProposal(
+                kind="answer",
+                message=proposal.message
+                or "Could not build a process map from the transcript.",
+            )
+        return proposal, usage
 
-    if proposal.kind != "graph":
-        proposal = AiProposal(
-            kind="answer",
-            message=proposal.message or "Could not build a process map from the transcript.",
+    if variant == "pair":
+        as_is, u1 = await _one("as_is")
+        to_be, u2 = await _one("to_be")
+        usage = AiUsageTotals()
+        usage.add(
+            ai_client.AiReply(
+                content="",
+                prompt_tokens=(u1.prompt_tokens or 0) + (u2.prompt_tokens or 0),
+                completion_tokens=(u1.completion_tokens or 0) + (u2.completion_tokens or 0),
+            )
         )
+        summary = f"[transcript pair {len(text)} chars]"
+        if chat_session is None:
+            chat_session = AiChatSession(
+                map_id=version.map_id,
+                login_id=user,
+                title=derive_chat_title(payload.focus or "As-Is / To-Be"),
+            )
+            session.add(chat_session)
+            await session.flush()
+        session.add(
+            AiChatMessage(
+                session_id=chat_session.id,
+                role="user",
+                content=summary,
+                version_id=version_id,
+            )
+        )
+        session.add(
+            AiChatMessage(
+                session_id=chat_session.id,
+                role="assistant",
+                content=as_is.message or "As-Is / To-Be drafts ready",
+                kind="graph",
+                payload={
+                    "pair": True,
+                    "as_is": serialize_proposal_payload(as_is),
+                    "to_be": serialize_proposal_payload(to_be),
+                },
+                version_id=version_id,
+            )
+        )
+        chat_session.updated_at = now
+        await prune_chat_session_messages(
+            session, chat_session.id, await get_ai_chat_max_messages(session)
+        )
+        await prune_map_chat_sessions(
+            session, user, version.map_id, await get_ai_chat_max_sessions(session)
+        )
+        session.add(
+            AiUsageEvent(
+                login_id=user,
+                map_id=version.map_id,
+                version_id=version_id,
+                model=payload.model or "",
+                kind="graph",
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                ok=True,
+            )
+        )
+        await session.commit()
+        return AiTranscriptPairOut(
+            message="As-Is and To-Be drafts generated — apply each from the AI panel.",
+            as_is=as_is,
+            to_be=to_be,
+            session_id=chat_session.id,
+        )
+
+    v = "single" if variant == "single" else variant
+    proposal, usage = await _one(v)
 
     # 채팅 적재 — 원문 대신 요약만
     summary = (
         f"[transcript {len(text)} chars"
+        + (f", variant={v}" if v != "single" else "")
         + (f", focus={payload.focus[:80]}" if payload.focus.strip() else "")
         + (f", hint={payload.industry_hint[:40]}" if payload.industry_hint.strip() else "")
         + "]"

@@ -1626,13 +1626,22 @@ export interface AiTranscriptBody {
   industry_hint?: string;
   session_id?: number | null;
   model?: string | null;
+  /** single | as_is | to_be | pair */
+  variant?: string;
+}
+
+export interface AiTranscriptPair {
+  message: string;
+  as_is: AiProposal;
+  to_be: AiProposal;
+  session_id?: number | null;
 }
 
 export function aiFromTranscript(
   versionId: number,
   body: AiTranscriptBody,
-): Promise<AiProposal> {
-  return request<AiProposal>(`/versions/${versionId}/ai/from-transcript`, {
+): Promise<AiProposal | AiTranscriptPair> {
+  return request<AiProposal | AiTranscriptPair>(`/versions/${versionId}/ai/from-transcript`, {
     method: "POST",
     body: JSON.stringify({
       transcript: body.transcript,
@@ -1640,7 +1649,75 @@ export function aiFromTranscript(
       industry_hint: body.industry_hint ?? "",
       session_id: body.session_id ?? null,
       model: body.model ?? null,
+      variant: body.variant ?? "single",
     }),
+  });
+}
+
+export function isTranscriptPair(
+  p: AiProposal | AiTranscriptPair,
+): p is AiTranscriptPair {
+  return p != null && typeof p === "object" && "as_is" in p && "to_be" in p;
+}
+
+// ── Interview campaigns (P3) ──────────────────────────────
+
+export interface InterviewCampaign {
+  id: number;
+  map_id: number;
+  token: string;
+  title: string;
+  questions: { id: string; prompt: string }[];
+  status: string;
+  created_by: string;
+  response_count: number;
+  share_path: string;
+}
+
+export function createInterviewCampaign(
+  mapId: number,
+  title?: string,
+): Promise<InterviewCampaign> {
+  return request<InterviewCampaign>(`/maps/${mapId}/interview-campaigns`, {
+    method: "POST",
+    body: JSON.stringify({ title: title ?? "Process interview" }),
+  });
+}
+
+export function listInterviewCampaigns(mapId: number): Promise<InterviewCampaign[]> {
+  return request<InterviewCampaign[]>(`/maps/${mapId}/interview-campaigns`);
+}
+
+export function getPublicInterview(token: string): Promise<{
+  title: string;
+  questions: { id: string; prompt: string }[];
+  status: string;
+}> {
+  return request(`/interview/c/${token}`);
+}
+
+export function submitInterviewResponse(
+  token: string,
+  body: { respondent_name: string; answers: Record<string, string> },
+): Promise<{ id: number }> {
+  return request(`/interview/c/${token}/responses`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function synthesizeInterview(campaignId: number): Promise<{
+  transcript: string;
+  response_count: number;
+}> {
+  return request(`/interview-campaigns/${campaignId}/synthesize`, { method: "POST" });
+}
+
+/** P4 event-log mining CSV → Graph */
+export function parseEventLogImport(versionId: number, csv: string): Promise<Graph> {
+  return request<Graph>(`/versions/${versionId}/import/event-log`, {
+    method: "POST",
+    body: JSON.stringify({ csv }),
   });
 }
 
@@ -1663,6 +1740,10 @@ export interface AiMessagePayload {
   edges?: AiEdge[];
   groups?: AiGroup[];
   ops?: AiOp[];
+  /** P2 pair 응답 — as_is/to_be 각각 graph 서브셋 */
+  pair?: boolean;
+  as_is?: AiMessagePayload;
+  to_be?: AiMessagePayload;
 }
 
 export interface AiChatMessageRow {

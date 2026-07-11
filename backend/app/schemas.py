@@ -966,6 +966,8 @@ class AiTranscriptRequest(BaseModel):
     industry_hint: str = Field(default="", max_length=100)
     session_id: int | None = None
     model: str | None = None
+    # single | as_is | to_be | pair (P2 As-Is/To-Be)
+    variant: str = Field(default="single", max_length=20)
 
 
 class AiModelsOut(BaseModel):
@@ -1149,6 +1151,15 @@ class AiProposal(BaseModel):
             if group.parent_key is not None and group.parent_key not in group_keyset:
                 raise ValueError(f"group references unknown parent key: {group.parent_key}")
         return self
+
+
+class AiTranscriptPairOut(BaseModel):
+    """P2 — As-Is + To-Be graph 제안 쌍."""
+
+    message: str = ""
+    as_is: AiProposal
+    to_be: AiProposal
+    session_id: int | None = None
 
 
 class TableInfoOut(BaseModel):

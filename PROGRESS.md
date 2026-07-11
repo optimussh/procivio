@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — P2/P3/P4 discovery (feat/p2-p3-p4-discovery)
+- P2 As-Is/To-Be — `variant=pair|as_is|to_be` on from-transcript; AI panel dual generate + Apply To-Be
+- P3 interview collect — campaigns/token public form `/interview/[token]`, synthesize → transcript
+- P4 event-log mining MVP — DFG from CSV (`case_id,activity,timestamp`) → graph; canvas More menu import
+- pytest `test_mining` + `test_interview`
+
 ## 2026-07-11 — BPMN 2.0 subset export/import (P1) (feat/interview-transcript-map)
 - `app/bpmn_io.py` — graph↔BPMN XML (start/end/task/gateway/callActivity + DI)
 - `GET .../export/bpmn`, `POST .../import/bpmn` (파싱만, 저장은 에디터 PUT)
