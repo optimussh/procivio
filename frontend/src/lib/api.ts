@@ -281,16 +281,6 @@ export function getEligibleAssignees(versionId: number): Promise<EligibleAssigne
   return request<EligibleAssignees>(`/versions/${versionId}/eligible-assignees`);
 }
 
-export function updateMap(
-  mapId: number,
-  patch: { name?: string; description?: string },
-): Promise<MapSummary> {
-  return request<MapSummary>(`/maps/${mapId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
-}
-
 // 오우닝 부서 지정/변경 — owner/sysadmin 전용. 파생 editor가 새 부서를 따라간다 (spec 2026-07-10)
 export function setOwningDepartment(
   mapId: number,

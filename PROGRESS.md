@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — frontend build fix: duplicate updateMap (main)
+- `api.ts` 중복 `updateMap` export 제거 — Next/TS 빌드 에러 수정.
+
 ## 2026-07-11 — Procivio rebrand · AI cascade · Inquire · Structure · LangToggle (main)
 - 브랜드/로드맵 문서 — `docs/brand/*`(procivio·NOW·license·roadmap), master design, bilingual EN+KO.
 - AI cascade 키 — 환경변수 기반 프로바이더 체인(`.env.example` 키, 실모델 스모크 문서).
