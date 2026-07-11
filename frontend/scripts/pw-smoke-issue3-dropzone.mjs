@@ -1,9 +1,8 @@
-// Issue 3 스모크 — (i) 드롭 링에 obsolete "child" 타일이 없는지, (ii) 노드를 하위프로세스의
-// front/back 타일에 드롭하면 삽입 엣지가 하위프로세스 핸들(in/__primary__)에 붙는지(댕글링 아님),
-// (iii) 노드↔하위프로세스 swap 시 위치와 엣지가 올바른 핸들로 교환되는지 실측.
-// map 3: c-start(start) → c-order(subprocess,linked=1) → c-deliver(subprocess,linked=2) → c-done(end),
+// Issue 3 ?�모????(i) ?�롭 링에 obsolete "child" ?�?�이 ?�는지, (ii) ?�드�??�위?�로?�스??// front/back ?�?�에 ?�롭?�면 ?�입 ?��?가 ?�위?�로?�스 ?�들(in/__primary__)??붙는지(?��?�??�님),
+// (iii) ?�드?�하?�프로세??swap ???�치?� ?��?가 ?�바�??�들�?교환?�는지 ?�측.
+// map 3: c-start(start) ??c-order(subprocess,linked=1) ??c-deliver(subprocess,linked=2) ??c-done(end),
 //         c-order -취소-> c-cancelled(end).
-// 실행: node scripts/pw-smoke-issue3-dropzone.mjs  (playwright-core, 서버 8000/3000 기동 전제)
+// ?�행: node scripts/pw-smoke-issue3-dropzone.mjs  (playwright-core, ?�버 8000/3000 기동 ?�제)
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -22,10 +21,10 @@ page.on("console", (m) => {
   }
 });
 
-// seed 그래프 백업 → 테스트 끝나면 복원(스모크 멱등)
+// seed 그래??백업 ???�스???�나�?복원(?�모??멱등)
 const seed = await (await fetch(API)).json();
 
-await page.goto("http://localhost:3000/maps/3", { waitUntil: "domcontentloaded" });
+await page.goto("http://localhost:7000/maps/3", { waitUntil: "domcontentloaded" });
 await page.waitForSelector('.react-flow__node[data-id="c-done"]', { timeout: 30000 });
 await page.waitForTimeout(2500);
 
@@ -33,52 +32,51 @@ const editable = await page.evaluate(() =>
   document.querySelector('.react-flow__node[data-id="c-start"]').classList.contains("draggable"),
 );
 if (!editable) {
-  console.log("NOT EDITABLE (read-only) — checkout held by another user; cannot exercise drop-zone.");
+  console.log("NOT EDITABLE (read-only) ??checkout held by another user; cannot exercise drop-zone.");
   await browser.close();
   process.exit(1);
 }
 
 const box = (id) => page.locator(`.react-flow__node[data-id="${id}"]`).boundingBox();
 
-// 드롭 링이 뜰 때까지 A를 B 위로 끌어 dwell. zone 타일 라벨/활성 zone을 반환.
+// ?�롭 링이 ???�까지 A�?B ?�로 ?�어 dwell. zone ?�???�벨/?�성 zone??반환.
 async function hoverRing(aId, bId) {
   const a = await box(aId);
   const b = await box(bId);
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
-  // B 중심으로 단계 이동 후 머문다(DWELL_MS) — 링 표시
+  // B 중심?�로 ?�계 ?�동 ??머문??DWELL_MS) ??�??�시
   const bx = b.x + b.width / 2;
   const by = b.y + b.height / 2;
   await page.mouse.move((a.x + bx) / 2, (a.y + by) / 2, { steps: 6 });
   await page.mouse.move(bx, by, { steps: 6 });
   await page.waitForTimeout(700); // > DWELL_MS
-  await page.mouse.move(bx, by, { steps: 2 }); // dwell 트리거 재확인
-  await page.waitForTimeout(400);
+  await page.mouse.move(bx, by, { steps: 2 }); // dwell ?�리�??�확??  await page.waitForTimeout(400);
   return { bx, by };
 }
 
-// ===== (i) 드롭 링에 "child" 타일이 없는지 =====
+// ===== (i) ?�롭 링에 "child" ?�?�이 ?�는지 =====
 const { bx, by } = await hoverRing("c-start", "c-deliver");
-// 링 타일 라벨 수집 — "Into sub-process"/"하위로 넣기"가 있으면 child 타일이 남아있는 것.
+// �??�???�벨 ?�집 ??"Into sub-process"/"?�위�??�기"가 ?�으�?child ?�?�이 ?�아?�는 �?
 const ringLabels = await page.evaluate(() => {
   const ring = [...document.querySelectorAll(".zone-pop")];
   return ring.map((d) => d.textContent?.trim() ?? "");
 });
 const hasChildTile = ringLabels.some(
-  (l) => l.includes("Into sub-process") || l.includes("하위로 넣기"),
+  (l) => l.includes("Into sub-process") || l.includes("?�위�??�기"),
 );
 console.log("ring tile labels:", JSON.stringify(ringLabels));
 console.log("(i) child tile present (expect false):", hasChildTile);
-// 드래그 취소(엣지 변형 없이) — front 타일이 아닌 링 중앙 위로 올려 zone=null로 만든 뒤 esc
+// ?�래�?취소(?��? 변???�이) ??front ?�?�이 ?�닌 �?중앙 ?�로 ?�려 zone=null�?만든 ??esc
 await page.mouse.move(bx, by);
 await page.keyboard.press("Escape");
 await page.mouse.up();
 await page.waitForTimeout(400);
 
-// ===== (ii) 노드를 하위프로세스 back 타일에 드롭 → 삽입 엣지가 in/__primary__ 핸들 =====
-// c-done(end)를 c-order(subprocess) "back"에 드롭 → c-order --__primary__--> c-done(th:left default)
-// 삽입(rewire)되며 기존 c-order--__primary__-->c-deliver 가 c-done 경유로. c-done은 end라 source 정상.
-// 핵심 검증: 새 엣지 c-order -> c-done 의 sourceHandle == __primary__ (subprocess source).
+// ===== (ii) ?�드�??�위?�로?�스 back ?�?�에 ?�롭 ???�입 ?��?가 in/__primary__ ?�들 =====
+// c-done(end)�?c-order(subprocess) "back"???�롭 ??c-order --__primary__--> c-done(th:left default)
+// ?�입(rewire)?�며 기존 c-order--__primary__-->c-deliver 가 c-done 경유�? c-done?� end??source ?�상.
+// ?�심 검�? ???��? c-order -> c-done ??sourceHandle == __primary__ (subprocess source).
 async function dropOnZone(aId, bId, zone) {
   const a = await box(aId);
   const b = await box(bId);
@@ -88,14 +86,14 @@ async function dropOnZone(aId, bId, zone) {
   const by = b.y + b.height / 2;
   await page.mouse.move((a.x + bx) / 2, (a.y + by) / 2, { steps: 6 });
   await page.mouse.move(bx, by, { steps: 6 });
-  await page.waitForTimeout(700); // 링 표시(DWELL_MS)
-  // 타일 위치 — front=좌, back=우, group=상, swap=좌하. 링 반경은 ZONE_TILE 배치와 동일.
+  await page.waitForTimeout(700); // �??�시(DWELL_MS)
+  // ?�???�치 ??front=�? back=?? group=?? swap=좌하. �?반경?� ZONE_TILE 배치?� ?�일.
   const ring = await page.evaluate((z) => {
     const tiles = [...document.querySelectorAll(".zone-pop")];
-    // 라벨로 zone 식별
+    // ?�벨�?zone ?�별
     const want = {
-      front: ["Before", "앞에"],
-      back: ["After", "뒤에"],
+      front: ["Before", "?�에"],
+      back: ["After", "?�에"],
       swap: ["Swap", "교환"],
       group: ["Group", "그룹"],
     }[z];
@@ -114,13 +112,13 @@ async function dropOnZone(aId, bId, zone) {
   await page.waitForTimeout(400);
 }
 
-// c-cancelled(end) 를 c-deliver(subprocess) "back"에 삽입 → c-deliver --__primary__--> c-cancelled 새 엣지.
+// c-cancelled(end) �?c-deliver(subprocess) "back"???�입 ??c-deliver --__primary__--> c-cancelled ???��?.
 let insertBackOk = false;
 let insertBackHandle = "(none)";
 try {
   await dropOnZone("c-cancelled", "c-deliver", "back");
-  // 충돌 프롬프트가 뜨면 insert 선택
-  const insertBtn = page.locator("button", { hasText: /Insert|삽입/ }).first();
+  // 충돌 ?�롬?�트가 ?�면 insert ?�택
+  const insertBtn = page.locator("button", { hasText: /Insert|?�입/ }).first();
   if (await insertBtn.isVisible().catch(() => false)) {
     await insertBtn.click();
     await page.waitForTimeout(300);
@@ -129,41 +127,39 @@ try {
   const g = await (await fetch(API)).json();
   const e = g.edges.find((x) => x.source_node_id === "c-deliver" && x.target_node_id === "c-cancelled");
   insertBackHandle = e ? `sh=${e.source_handle ?? "-"} th=${e.target_handle ?? "-"}` : "(no edge)";
-  // c-deliver는 subprocess → source_handle 은 __primary__ 여야 RF가 붙인다.
+  // c-deliver??subprocess ??source_handle ?� __primary__ ?�야 RF가 붙인??
   insertBackOk = !!e && e.source_handle === PRIMARY;
 } catch (err) {
   console.log("insertBack error:", err.message);
 }
 console.log("(ii) insert-after into-subprocess-source edge:", insertBackHandle, "ok=", insertBackOk);
 
-// dangling 여부 — 렌더된 엣지 path가 실제 존재하는지(React Flow가 핸들 못 찾으면 엣지 미렌더).
+// dangling ?��? ???�더???��? path가 ?�제 존재?�는지(React Flow가 ?�들 �?찾으�??��? 미렌??.
 const renderedEdge = await page.evaluate(() => {
-  // c-deliver -> c-cancelled 엣지 path 존재?
+  // c-deliver -> c-cancelled ?��? path 존재?
   const paths = [...document.querySelectorAll(".react-flow__edge")];
   return paths.some((p) => {
     const id = p.getAttribute("data-id") ?? p.getAttribute("data-testid") ?? "";
-    return id.includes("c-deliver") || (p.textContent ?? "").length >= 0; // 존재성만
+    return id.includes("c-deliver") || (p.textContent ?? "").length >= 0; // 존재?�만
   });
 });
 console.log("(ii) edges rendered (non-dangling presence):", renderedEdge);
 
-// ===== (iii) swap 노드↔하위프로세스 → 위치+엣지 교환, 핸들 보정 =====
-// 먼저 그래프 복원(깨끗한 시작). (ii)의 지연 autosave(2s 디바운스)가 seed PUT 뒤에 덮어쓰지 않도록
-// 충분히 비운 뒤 복원하고, 복원이 안착하도록 reload 전 settle을 둔다.
-await page.waitForTimeout(3000); // (ii) 지연 autosave 드레인
-await fetch(API, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(seed) });
+// ===== (iii) swap ?�드?�하?�프로세?????�치+?��? 교환, ?�들 보정 =====
+// 먼�? 그래??복원(깨끗???�작). (ii)??지??autosave(2s ?�바?�스)가 seed PUT ?�에 ??��?��? ?�도�?// 충분??비운 ??복원?�고, 복원???�착?�도�?reload ??settle???�다.
+await page.waitForTimeout(3000); // (ii) 지??autosave ?�레??await fetch(API, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(seed) });
 await page.waitForTimeout(500);
 await page.reload({ waitUntil: "domcontentloaded" });
 await page.waitForSelector('.react-flow__node[data-id="c-done"]', { timeout: 30000 });
 await page.waitForTimeout(2500);
-// 스왑 전 c-done 이 seed 자리(800)에 있는지 확인 — 복원 안착 검증.
+// ?�왑 ??c-done ??seed ?�리(800)???�는지 ?�인 ??복원 ?�착 검�?
 const preSwapDoneX = (await (await fetch(API)).json()).nodes.find((n) => n.id === "c-done")?.pos_x;
 console.log("(iii) pre-swap c-done pos_x (expect ~800):", preSwapDoneX);
 
 let swapOk = false;
 let swapDetail = "(none)";
-// 핸들 정합 불변식 — 모든 루트 엣지: target이 하위프로세스면 th==="in", source가 하위프로세스면 sh==="__primary__",
-// 그리고 하위프로세스가 아닌 끝점엔 전용 핸들이 남아있으면 안 됨(swap 후 stale 핸들 검출).
+// ?�들 ?�합 불�?????모든 루트 ?��?: target???�위?�로?�스�?th==="in", source가 ?�위?�로?�스�?sh==="__primary__",
+// 그리�??�위?�로?�스가 ?�닌 ?�점???�용 ?�들???�아?�으�?????swap ??stale ?�들 검�?.
 function checkHandleInvariant(g) {
   const subById = new Map(g.nodes.map((n) => [n.id, n.node_type === "subprocess"]));
   const bad = [];
@@ -178,11 +174,11 @@ function checkHandleInvariant(g) {
   return bad;
 }
 try {
-  // c-done(end) 를 c-order(subprocess) 와 swap → 끝점이 바뀐 엣지들의 핸들이 새 타입에 맞게 보정돼야.
+  // c-done(end) �?c-order(subprocess) ?� swap ???�점??바�??��??�의 ?�들?????�?�에 맞게 보정?�야.
   await dropOnZone("c-done", "c-order", "swap");
   await page.waitForTimeout(3200);
   const g = await (await fetch(API)).json();
-  // 위치 교환 확인 — c-done 이 원래 c-order 자리(320,220), c-order 가 원래 c-done 자리(800,220) 근처.
+  // ?�치 교환 ?�인 ??c-done ???�래 c-order ?�리(320,220), c-order 가 ?�래 c-done ?�리(800,220) 근처.
   const cDone = g.nodes.find((n) => n.id === "c-done");
   const cOrder = g.nodes.find((n) => n.id === "c-order");
   const posSwapped = !!cDone && !!cOrder && Math.abs(cDone.pos_x - 320) < 40 && Math.abs(cOrder.pos_x - 800) < 40;
@@ -195,7 +191,7 @@ try {
 console.log("(iii) swap:", swapDetail, "ok=", swapOk);
 
 await page.screenshot({ path: "/tmp/bpm-issue3.png", fullPage: false });
-// 브라우저를 먼저 닫아 지연 autosave가 복원 PUT을 덮어쓰지 못하게 한 뒤 seed 복원.
+// 브라?��?�?먼�? ?�아 지??autosave가 복원 PUT????��?��? 못하�?????seed 복원.
 await browser.close();
 await new Promise((r) => setTimeout(r, 500));
 await fetch(API, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(seed) });

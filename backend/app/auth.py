@@ -1,58 +1,41 @@
-"""Keycloak OIDC 인증 — Bearer JWT 검증 (docs/spec.md §4).
+"""요청 사용자 식별 — X-Dev-User 헤더 기반 (OIDC/Keycloak 없음).
 
-settings.auth_enabled=False(로컬)면 검증을 건너뛰고 dev 사용자를 반환한다.
-True(서버)면 realm JWKS로 RS256 서명을 검증한다.
+settings.auth_enabled=False: 헤더 없으면 settings.dev_user 폴백 (로컬 기본).
+settings.auth_enabled=True: X-Dev-User(또는 Bearer <loginId> 평문) 필수 — 없으면 401.
+권한 강제(is_sysadmin 차별)는 auth_enabled / dev_enforce_permissions 로 제어.
 """
 
-from functools import lru_cache
-
-import jwt
 from fastapi import Depends, Header, HTTPException
 
 from app.permissions.logic import is_sysadmin
 from app.settings import settings
 
 
-@lru_cache(maxsize=1)
-def _jwk_client() -> jwt.PyJWKClient:
-    # realm 공개키 — Keycloak certs 엔드포인트. lru_cache로 키 세트를 재사용.
-    return jwt.PyJWKClient(f"{settings.keycloak_issuer}/protocol/openid-connect/certs")
-
-
 def get_current_user(
     authorization: str | None = Header(default=None),
     x_dev_user: str | None = Header(default=None),
 ) -> str:
-    """요청 사용자 loginId. auth OFF면 X-Dev-User(없으면 dev_user), ON이면 JWT preferred_username."""
+    """요청 사용자 loginId. JWT 검증 없음 — 프론트 로그인 피커가 X-Dev-User 로 전달."""
+    if x_dev_user and x_dev_user.strip():
+        return x_dev_user.strip()
+
+    # 선택: Authorization: Bearer <loginId> (JWT 아님 — 점 없는 평문 id)
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        if token and "." not in token:
+            return token
+
     if not settings.auth_enabled:
-        return x_dev_user or settings.dev_user  # 헤더는 auth OFF에서만 신뢰
+        return settings.dev_user
 
-    if authorization is None or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="missing bearer token")
-
-    token = authorization.removeprefix("Bearer ")
-    try:
-        signing_key = _jwk_client().get_signing_key_from_jwt(token)
-        claims = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            issuer=settings.keycloak_issuer,
-            # 빈 문자열(미설정·compose 기본 ${VAR:-})도 None과 동일하게 aud 검증 생략 — 아니면 토큰이 항상 깨짐
-            audience=settings.keycloak_audience or None,
-            options={"verify_aud": bool(settings.keycloak_audience)},
-        )
-    except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=401, detail=f"invalid token: {exc}") from exc
-
-    username = claims.get("preferred_username") or claims.get("sub")
-    if not username:
-        raise HTTPException(status_code=401, detail="token has no subject")
-    return username
+    raise HTTPException(
+        status_code=401,
+        detail="missing user identity (X-Dev-User header required)",
+    )
 
 
 async def require_sysadmin(login_id: str = Depends(get_current_user)) -> str:
-    """시스템 관리자(sysadmin)만 — 기존 admin 권한을 흡수 (F6, 2026-06-24). 아니면 403."""
+    """시스템 관리자(sysadmin)만 — 아니면 403."""
     if not is_sysadmin(login_id):
         raise HTTPException(status_code=403, detail="system admin only")
     return login_id

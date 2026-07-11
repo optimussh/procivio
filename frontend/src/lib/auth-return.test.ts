@@ -2,15 +2,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  clearAutoLoginSkip,
-  consumeAutoLoginSkip,
   consumeReturnTo,
-  consumeSsoLogoutHint,
   isSafeReturnPath,
   peekReturnTo,
   saveReturnTo,
-  saveSsoLogoutHint,
-  setAutoLoginSkip,
 } from "@/lib/auth-return";
 
 function makeFakeStorage(): Storage {
@@ -51,7 +46,7 @@ describe("isSafeReturnPath", () => {
 describe("returnTo save/peek/consume", () => {
   it("save 후 consume은 값을 돌려주고 제거한다", () => {
     saveReturnTo("/maps/12?v=3");
-    expect(peekReturnTo()).toBe("/maps/12?v=3"); // peek은 제거하지 않음
+    expect(peekReturnTo()).toBe("/maps/12?v=3");
     expect(consumeReturnTo()).toBe("/maps/12?v=3");
     expect(consumeReturnTo()).toBeNull();
   });
@@ -62,29 +57,7 @@ describe("returnTo save/peek/consume", () => {
   it("저장소가 오염돼도 consume은 unsafe 값을 돌려주지 않는다", () => {
     storage.setItem("bpm.returnTo", "https://evil.com");
     expect(consumeReturnTo()).toBeNull();
-    expect(storage.getItem("bpm.returnTo")).toBeNull(); // 오염 값도 제거
-  });
-});
-
-describe("autoLoginSkip flag", () => {
-  it("consume은 1회만 true — 이후 재방문은 자동 로그인 재개", () => {
-    expect(consumeAutoLoginSkip()).toBe(false);
-    setAutoLoginSkip();
-    expect(consumeAutoLoginSkip()).toBe(true);
-    expect(consumeAutoLoginSkip()).toBe(false); // 소비됨
-  });
-  it("clear는 대기 중인 억제를 취소한다", () => {
-    setAutoLoginSkip();
-    clearAutoLoginSkip();
-    expect(consumeAutoLoginSkip()).toBe(false);
-  });
-});
-
-describe("ssoLogoutHint", () => {
-  it("save 후 consume은 1회만 값을 돌려준다", () => {
-    saveSsoLogoutHint("id-token-abc");
-    expect(consumeSsoLogoutHint()).toBe("id-token-abc");
-    expect(consumeSsoLogoutHint()).toBeNull(); // 소비됨
+    expect(storage.getItem("bpm.returnTo")).toBeNull();
   });
 });
 
@@ -93,7 +66,5 @@ describe("window 없음(SSR)·storage 접근 불가", () => {
     vi.stubGlobal("window", undefined);
     expect(() => saveReturnTo("/maps/1")).not.toThrow();
     expect(consumeReturnTo()).toBeNull();
-    expect(consumeAutoLoginSkip()).toBe(false);
-    expect(consumeSsoLogoutHint()).toBeNull();
   });
 });

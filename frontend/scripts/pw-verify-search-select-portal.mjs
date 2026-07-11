@@ -1,22 +1,22 @@
-// SearchSelect 드롭다운 클리핑 회귀 검증 — 인스펙터(overflow-y-auto)·노드 편집 모달(overflow-hidden).
-// 실행: frontend/ 에서 node scripts/pw-verify-search-select-portal.mjs
-// 전제: backend :8000 + frontend :3000, dev.db 종합 시드.
-//   맵 1의 draft v6 점유권 보유자는 시드상 sion.seo3 — 그 유저로 열어야 피커가 편집 가능 상태로 뜬다.
-//   (admin.sys로 /maps/1을 열면 게시본 v5가 읽기전용으로 열려 SearchSelect 자체가 없다.)
+// SearchSelect ?�롭?�운 ?�리???��? 검�????�스?�터(overflow-y-auto)·?�드 ?�집 모달(overflow-hidden).
+// ?�행: frontend/ ?�서 node scripts/pw-verify-search-select-portal.mjs
+// ?�제: backend :8000 + frontend :3000, dev.db 종합 ?�드.
+//   �?1??draft v6 ?�유�?보유?�는 ?�드??sion.seo3 ??�??��?�??�어???�커가 ?�집 가???�태�??�다.
+//   (admin.sys�?/maps/1???�면 게시�?v5가 ?�기?�용?�로 ?�려 SearchSelect ?�체가 ?�다.)
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+const BASE = process.env.BASE_URL ?? "http://localhost:7000";
 const HEIGHTS = [800, 620, 540, 480];
 
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` ??${detail}` : ""}`);
 };
 
-// 메뉴가 실제로 온전히 보이는가 — 네 귀퉁이 안쪽 점에서 elementFromPoint가 메뉴 내부를 가리켜야 한다.
-// bounding box만 보면 조상의 overflow 클리핑을 못 잡는다.
+// 메뉴가 ?�제�??�전??보이?��? ????귀?�이 ?�쪽 ?�에??elementFromPoint가 메뉴 ?��?�?가리켜???�다.
+// bounding box�?보면 조상??overflow ?�리?�을 �??�는??
 const probeMenu = (page) =>
   page.evaluate(() => {
     const menu = document.querySelector('[data-id="search-select-menu"]');
@@ -71,25 +71,24 @@ for (const height of HEIGHTS) {
     }
   }
   if (bpmNode < 0) {
-    check(`${height}px — BPM 속성 피커 노출`, false, "편집 가능한 process 노드 없음");
+    check(`${height}px ??BPM ?�성 ?�커 ?�출`, false, "?�집 가?�한 process ?�드 ?�음");
     await ctx.close();
     continue;
   }
 
-  // 인스펙터 패널의 부서 드롭다운
+  // ?�스?�터 ?�널??부???�롭?�운
   await page.locator('[data-id="search-select-trigger"]').first().click();
   await page.waitForTimeout(350);
   const insp = await probeMenu(page);
   check(
-    `인스펙터 ${height}px — 드롭다운 안 잘림`,
+    `?�스?�터 ${height}px ???�롭?�운 ???�림`,
     insp.found && insp.hidden.length === 0 && insp.inViewport && insp.portaled,
     JSON.stringify(insp),
   );
   await page.keyboard.press("Escape");
   await page.waitForTimeout(250);
 
-  // 노드 편집 모달 — 제목 더블클릭은 이름 편집이라 카드 하단을 노린다
-  const nb = await nodes.nth(bpmNode).boundingBox();
+  // ?�드 ?�집 모달 ???�목 ?�블?�릭?� ?�름 ?�집?�라 카드 ?�단???�린??  const nb = await nodes.nth(bpmNode).boundingBox();
   await page.mouse.dblclick(nb.x + nb.width / 2, nb.y + nb.height - 6);
   await page.waitForTimeout(700);
   const modal = page.locator('div.w-\\[420px\\]').first();
@@ -108,15 +107,15 @@ for (const height of HEIGHTS) {
       navReachable: nr.top >= cr.top - 1 && nr.bottom <= cr.bottom + 1,
     };
   });
-  check(`모달 ${height}px — 본문 스크롤 살아있음`, body.canScroll, JSON.stringify(body));
-  check(`모달 ${height}px — 스크롤바 숨김`, body.scrollbarHidden);
-  check(`모달 ${height}px — 끝까지 내리면 선행/후행 내비가 카드 안`, body.navReachable);
+  check(`모달 ${height}px ??본문 ?�크�??�아?�음`, body.canScroll, JSON.stringify(body));
+  check(`모달 ${height}px ???�크롤바 ?��?`, body.scrollbarHidden);
+  check(`모달 ${height}px ???�까지 ?�리�??�행/?�행 ?�비가 카드 ??, body.navReachable);
 
   await modal.locator('[data-id="search-select-trigger"]').first().click();
   await page.waitForTimeout(350);
   const mod = await probeMenu(page);
   check(
-    `모달 ${height}px — 드롭다운 안 잘림`,
+    `모달 ${height}px ???�롭?�운 ???�림`,
     mod.found && mod.hidden.length === 0 && mod.inViewport && mod.portaled,
     JSON.stringify(mod),
   );

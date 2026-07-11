@@ -1,8 +1,7 @@
-// 한글이름·한글그룹 일괄 등록 스모크 — Employees 탭→모달→다운로드→임포트(배열/맵 포맷, 신규/충돌 skip/overwrite)→테이블 반영.
-// 실행: frontend/ 에서 node scripts/pw-smoke-korean-names.mjs
-// 전제: 워크트리 backend(:8001)+frontend(:3000, BACKEND_URL=8001) 기동. playwright-core+시스템 Chrome.
-// 재실행 전제: 대상 유저 korean_name이 비어 있어야 ③(무충돌 1차 임포트) 전제가 성립 —
-//   sqlite3 backend/dev.db "UPDATE employees SET korean_name='', korean_dept='';" 로 리셋 후 실행.
+// ?��??�름·?��?그룹 ?�괄 ?�록 ?�모????Employees ??��모달?�다?�로?�→?�포??배열/�??�맷, ?�규/충돌 skip/overwrite)?�테?�블 반영.
+// ?�행: frontend/ ?�서 node scripts/pw-smoke-korean-names.mjs
+// ?�제: ?�크?�리 backend(:8001)+frontend(:3000, BACKEND_URL=8001) 기동. playwright-core+?�스??Chrome.
+// ?�실???�제: ?�???��? korean_name??비어 ?�어????무충??1�??�포?? ?�제가 ?�립 ??//   sqlite3 backend/dev.db "UPDATE employees SET korean_name='', korean_dept='';" �?리셋 ???�행.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,11 +9,11 @@ import path from "node:path";
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+const BASE = process.env.BASE_URL ?? "http://localhost:7000";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` ??${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -24,15 +23,14 @@ const ctx = await browser.newContext({
 });
 await ctx.addInitScript(() => {
   window.localStorage.setItem("bpm.devUser", "admin.sys");
-  window.localStorage.setItem("bpm.lang", "en"); // 기본 ko — 탭 라벨 "Employees" 고정용
-});
+  window.localStorage.setItem("bpm.lang", "en"); // 기본 ko ?????�벨 "Employees" 고정??});
 const page = await ctx.newPage();
 const consoleErrors = [];
 page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text());
 });
 
-// ① Employees 탭 진입 + 버튼/열 노출
+// ??Employees ??진입 + 버튼/???�출
 await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" });
 await page.getByRole("button", { name: "Employees", exact: true }).click();
 await page.waitForSelector('[data-id="kr-add-btn"]', { timeout: 15000 });
@@ -40,7 +38,7 @@ check("employees tab + kr-add button", true);
 check("korean name column", await page.locator("th", { hasText: "korean name" }).count() === 1);
 check("korean dept column", await page.locator("th", { hasText: "korean dept" }).count() === 1);
 
-// 대상 유저 2명 확보 — korean_name이 빈 앞 2명(재실행 시 이미 채워진 유저를 다시 고르지 않도록)
+// ?�???��? 2�??�보 ??korean_name??�???2�??�실?????��? 채워�??��?�??�시 고르지 ?�도�?
 const rows = await page.evaluate(async () => {
   const res = await fetch("/api/employees", { headers: { "X-Dev-User": "admin.sys" } });
   return res.json();
@@ -48,7 +46,7 @@ const rows = await page.evaluate(async () => {
 const [u1, u2] = rows.filter((r) => !r.korean_name).map((r) => r.login_id);
 check("employees seeded", Boolean(u1 && u2), `u1=${u1} u2=${u2}`);
 
-// ② 모달 + 미보유 목록 다운로드
+// ??모달 + 미보??목록 ?�운로드
 await page.click('[data-id="kr-add-btn"]');
 await page.waitForSelector('[data-id="korean-name-modal"]');
 const dlPromise = page.waitForEvent("download");
@@ -57,7 +55,7 @@ const download = await dlPromise;
 const ids = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
 check("download is id array incl. targets", Array.isArray(ids) && ids.includes(u1) && ids.includes(u2));
 
-// ②-b 추출 옵션 메뉴 — 4옵션 노출 + 전체 목록 다운로드
+// ??b 추출 ?�션 메뉴 ??4?�션 ?�출 + ?�체 목록 ?�운로드
 await page.click('[data-id="kr-export-menu-btn"]');
 await page.waitForSelector('[data-id="kr-export-menu"]');
 check(
@@ -70,14 +68,14 @@ const dlAll = await dlAllPromise;
 const allIds = JSON.parse(fs.readFileSync(await dlAll.path(), "utf8"));
 check("all-users export covers directory", Array.isArray(allIds) && allIds.length === rows.length);
 
-// ③ 1차 임포트 — 조회 응답 배열 포맷(status 필터·dept 포함), 충돌 없음 → 즉시 결과(updated 2, unknown 1)
+// ??1�??�포????조회 ?�답 배열 ?�맷(status ?�터·dept ?�함), 충돌 ?�음 ??즉시 결과(updated 2, unknown 1)
 const tmp1 = path.join(os.tmpdir(), "kr-import-1.json");
 fs.writeFileSync(
   tmp1,
   JSON.stringify([
-    { userId: u1, status: "found", name: "홍길동", enName: "GD Hong", dept: "AI Operations그룹", email: "x@y.z" },
+    { userId: u1, status: "found", name: "?�길??, enName: "GD Hong", dept: "AI Operations그룹", email: "x@y.z" },
     { userId: u2, status: "found", name: "김철수" },
-    { userId: "no.such.user", status: "found", name: "유령" },
+    { userId: "no.such.user", status: "found", name: "?�령" },
     { userId: "ignored.one", status: "not_found" },
     { userId: "ignored.two", status: "error", name: "무시" },
   ]),
@@ -91,12 +89,12 @@ check(
   result1.replace(/\n/g, " "),
 );
 await page.click('[data-id="kr-close-btn"]');
-check("table shows imported name", await page.locator("td", { hasText: "홍길동" }).count() >= 1);
+check("table shows imported name", await page.locator("td", { hasText: "?�길?? }).count() >= 1);
 check("table shows imported dept", await page.locator("td", { hasText: "AI Operations그룹" }).count() >= 1);
 
-// ④ 2차 임포트 — 충돌 → 툴팁 확인 → Skip all(값 유지)
+// ??2�??�포????충돌 ???�팁 ?�인 ??Skip all(�??��?)
 const tmp2 = path.join(os.tmpdir(), "kr-import-2.json");
-fs.writeFileSync(tmp2, JSON.stringify({ [u1]: "새이름" }));
+fs.writeFileSync(tmp2, JSON.stringify({ [u1]: "?�이�? }));
 await page.click('[data-id="kr-add-btn"]');
 await page.setInputFiles('[data-id="kr-file-input"]', tmp2);
 await page.waitForSelector('[data-id="kr-conflict-step"]');
@@ -104,7 +102,7 @@ check("conflict step shows 1 users", (await page.locator('[data-id="kr-conflict-
 await page.hover('[data-id="kr-conflict-step"] .cursor-help');
 await page.waitForSelector('[data-id="kr-conflict-tooltip"]');
 const tip = await page.locator('[data-id="kr-conflict-tooltip"]').innerText();
-check("tooltip lists current → next", tip.includes(u1) && tip.includes("홍길동") && tip.includes("새이름"));
+check("tooltip lists current ??next", tip.includes(u1) && tip.includes("?�길??) && tip.includes("?�이�?));
 await page.hover('[data-id="kr-conflict-tooltip"]');
 await page.waitForTimeout(150);
 check("tooltip persists while hovered", await page.locator('[data-id="kr-conflict-tooltip"]').isVisible());
@@ -112,9 +110,9 @@ await page.click('[data-id="kr-skip-all"]');
 await page.waitForSelector('[data-id="kr-result"]');
 check("skip keeps value", (await page.locator('[data-id="kr-result"]').innerText()).includes("0"));
 await page.click('[data-id="kr-close-btn"]');
-check("table keeps old name", await page.locator("td", { hasText: "홍길동" }).count() >= 1);
+check("table keeps old name", await page.locator("td", { hasText: "?�길?? }).count() >= 1);
 
-// ⑤ 3차 임포트 — Overwrite all(값 교체)
+// ??3�??�포????Overwrite all(�?교체)
 await page.click('[data-id="kr-add-btn"]');
 await page.setInputFiles('[data-id="kr-file-input"]', tmp2);
 await page.waitForSelector('[data-id="kr-conflict-step"]');
@@ -122,7 +120,7 @@ await page.click('[data-id="kr-overwrite-all"]');
 await page.waitForSelector('[data-id="kr-result"]');
 await page.click('[data-id="kr-close-btn"]');
 await page.waitForTimeout(500);
-check("overwrite replaces value", await page.locator("td", { hasText: "새이름" }).count() >= 1);
+check("overwrite replaces value", await page.locator("td", { hasText: "?�이�? }).count() >= 1);
 
 check("no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
 

@@ -1,7 +1,7 @@
-// Issue 2 스모크 — 모두 접힌 상태에서도 아웃라인의 하위프로세스 행(c-order/c-deliver)이 펼치기 어포던스
-// (chevron 버튼)를 보이는지, 클릭하면 (a) 행이 펼쳐지고 (b) 캔버스에 자식이 임베드되는지 실측.
-// map 3: c-order(주문 처리, linked=1) / c-deliver(배송, linked=2). 임베드 자식 id는 "c-order/<원본id>" 네임스페이스.
-// 실행: node scripts/pw-smoke-issue2-outline.mjs  (playwright-core, 서버 8000/3000 기동 전제)
+// Issue 2 ?�모????모두 ?�힌 ?�태?�서???�웃?�인???�위?�로?�스 ??c-order/c-deliver)???�치�??�포?�스
+// (chevron 버튼)�?보이?��?, ?�릭?�면 (a) ?�이 ?�쳐지�?(b) 캔버?�에 ?�식???�베?�되?��? ?�측.
+// map 3: c-order(주문 처리, linked=1) / c-deliver(배송, linked=2). ?�베???�식 id??"c-order/<?�본id>" ?�임?�페?�스.
+// ?�행: node scripts/pw-smoke-issue2-outline.mjs  (playwright-core, ?�버 8000/3000 기동 ?�제)
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -17,11 +17,11 @@ page.on("console", (m) => {
   }
 });
 
-await page.goto("http://localhost:3000/maps/3", { waitUntil: "domcontentloaded" });
+await page.goto("http://localhost:7000/maps/3", { waitUntil: "domcontentloaded" });
 await page.waitForSelector(".react-flow__node", { timeout: 30000 });
 await page.waitForTimeout(2500);
 
-// 아웃라인 행(li) 중 라벨 텍스트로 행을 찾아 펼치기 버튼(aria-label expand/collapse) 유무를 본다.
+// ?�웃?�인 ??li) �??�벨 ?�스?�로 ?�을 찾아 ?�치�?버튼(aria-label expand/collapse) ?�무�?본다.
 async function rowState(label) {
   return page.evaluate((lbl) => {
     const lis = [...document.querySelectorAll("aside li, nav li, ul li")];
@@ -29,14 +29,14 @@ async function rowState(label) {
     if (!li) return { found: false };
     const btn = li.querySelector("button[aria-label]");
     const al = btn?.getAttribute("aria-label") ?? "";
-    // ChevronDown(펼침) vs ChevronRight(접힘)은 aria-label(collapse vs expand)로 구분
-    const expandable = !!btn && (al.toLowerCase().includes("expand") || al.toLowerCase().includes("collapse") || al.includes("펼치") || al.includes("접기"));
-    const expanded = al.toLowerCase().includes("collapse") || al.includes("접기");
+    // ChevronDown(?�침) vs ChevronRight(?�힘)?� aria-label(collapse vs expand)�?구분
+    const expandable = !!btn && (al.toLowerCase().includes("expand") || al.toLowerCase().includes("collapse") || al.includes("?�치") || al.includes("?�기"));
+    const expanded = al.toLowerCase().includes("collapse") || al.includes("?�기");
     return { found: true, expandable, expanded, ariaLabel: al };
   }, label);
 }
 
-// 펼치기 버튼 클릭
+// ?�치�?버튼 ?�릭
 async function clickRowExpand(label) {
   return page.evaluate((lbl) => {
     const lis = [...document.querySelectorAll("aside li, nav li, ul li")];
@@ -48,7 +48,7 @@ async function clickRowExpand(label) {
   }, label);
 }
 
-// 캔버스에 c-order의 임베드 자식이 있는지 — data-id가 "c-order/" 로 시작하는 RF 노드.
+// 캔버?�에 c-order???�베???�식???�는지 ??data-id가 "c-order/" �??�작?�는 RF ?�드.
 async function embeddedChildCount(hostId) {
   return page.evaluate((h) => {
     return [...document.querySelectorAll(".react-flow__node")].filter((el) =>
@@ -57,7 +57,7 @@ async function embeddedChildCount(hostId) {
   }, hostId);
 }
 
-// ===== (1) 접힌 상태: c-order/c-deliver 행이 펼치기 어포던스를 가지는가 =====
+// ===== (1) ?�힌 ?�태: c-order/c-deliver ?�이 ?�치�??�포?�스�?가지?��? =====
 const orderBefore = await rowState("주문 처리");
 const deliverBefore = await rowState("배송");
 console.log("c-order row (collapsed):", JSON.stringify(orderBefore));
@@ -70,7 +70,7 @@ const affordanceOk =
   deliverBefore.found && deliverBefore.expandable && !deliverBefore.expanded;
 console.log("(1) collapsed subprocess rows show expand affordance:", affordanceOk);
 
-// ===== (2) 클릭 → 행 펼침 + 캔버스 자식 임베드 =====
+// ===== (2) ?�릭 ?????�침 + 캔버???�식 ?�베??=====
 const clicked = await clickRowExpand("주문 처리");
 console.log("clicked c-order expand:", clicked);
 await page.waitForTimeout(2500); // resolved embed + materialize

@@ -59,9 +59,9 @@
 | `html-to-image` | ^1.11.13 | MIT |
 | `lucide-react` | ^1.17.0 | ISC |
 | `next` | 16.2.9 | MIT |
-| `oidc-client-ts` | ^3.5.0 | Apache-2.0 |
+
 | `react` / `react-dom` | 19.2.4 | MIT |
-| `react-oidc-context` | ^3.3.1 | MIT |
+
 
 ### Notable transitive packages
 

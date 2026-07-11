@@ -66,7 +66,7 @@ Alembic은 아직 없다. backend가 기동할 때 `app/db.py::init_models()`가
   cp /path/to/운영/.env .env.dev
   # .env.dev에서 딱 한 줄 수정:
   #   APP_PORT=9800
-  # 나머지(POSTGRES_*, KEYCLOAK_*, LDAP_*, BPM_SYSADMINS …)는 운영과 동일하게 둔다.
+  # 나머지(POSTGRES_*, LDAP_*, BPM_SYSADMINS, AUTH_ENABLED …)는 운영과 동일하게 둔다.
   # (선택) MANUAL_URL=<편집용 매뉴얼 사이트 주소> — 설정 시 에디터 툴바에 버튼 노출, 비우면 숨김
   ```
 - [ ] **Keycloak 리다이렉트 허용** — realm `ai-portal`의 클라이언트에 9800 origin이 없으면 로그인 불가:

@@ -1,10 +1,9 @@
-// PNG ë‚´ë³´ë‚´ê¸° ê²€ì¦ â€” ì—ë””í„°(Ctrl+Shift+E)Â·ë¹„êµ(Export ë²„íŠ¼) ì¶œë ¥ì— ì—£ì§€(ê²€ì€ ì‹¤ì„ )ê°€ ì‹¤ì œë¡œ
-// ê·¸ë ¤ì§€ëŠ”ì§€ ê²€ì€ í”½ì…€ ìˆ˜ë¡œ íŒì • + ìº¡ì²˜ í›„ ë¼ì´ë¸Œ ì—£ì§€ ìŠ¤íƒ€ì¼ ì›ìƒë³µêµ¬ í™•ì¸.
-// ì‹¤í–‰: node scripts/pw-verify-png-export.mjs  (playwright-core, ì„œë²„ 8000/3000 ê¸°ë™, ë§µ 6 ì‹œë“œ ì „ì œ)
+// PNG ?´ë³´?´ê¸° ê²€ì¦????ë””??Ctrl+Shift+E)Â·ë¹„êµ(Export ë²„íŠ¼) ì¶œë ¥???£ì?(ê²€?€ ?¤ì„ )ê°€ ?¤ì œë¡?// ê·¸ë ¤ì§€?”ì? ê²€?€ ?½ì? ?˜ë¡œ ?ì • + ìº¡ì²˜ ???¼ì´ë¸??£ì? ?¤í????ìƒë³µêµ¬ ?•ì¸.
+// ?¤í–‰: node scripts/pw-verify-png-export.mjs  (playwright-core, ?œë²„ 8000/3000 ê¸°ë™, ë§?6 ?œë“œ ?„ì œ)
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const MIN_BLACK_PX = 2000; // 2Ã— í•´ìƒë„ì—ì„œ ì—£ì§€ 10ê°œë©´ ìˆ˜ë§Œ í”½ì…€ â€” ë³´ìˆ˜ì  í•˜í•œ
+const MIN_BLACK_PX = 2000; // 2Ã— ?´ìƒ?„ì—???£ì? 10ê°œë©´ ?˜ë§Œ ?½ì? ??ë³´ìˆ˜???˜í•œ
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1456, height: 900 } });
@@ -22,7 +21,7 @@ const page = await ctx.newPage();
 const errors = [];
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 
-// dataURL PNGì˜ ê²€ì€ í”½ì…€ ìˆ˜ â€” ì—£ì§€ ì‹¤ì„  ì¡´ìž¬ íŒì •
+// dataURL PNG??ê²€?€ ?½ì? ?????£ì? ?¤ì„  ì¡´ìž¬ ?ì •
 const countBlack = (dataUrl) =>
   page.evaluate(async (url) => {
     const img = new Image();
@@ -39,8 +38,8 @@ const countBlack = (dataUrl) =>
     return { black, width: img.width, height: img.height };
   }, dataUrl);
 
-// â”€â”€ ì—ë””í„° ë‚´ë³´ë‚´ê¸° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-await page.goto("http://localhost:3000/maps/6", { waitUntil: "domcontentloaded" });
+// ?€?€ ?ë””???´ë³´?´ê¸° ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+await page.goto("http://localhost:7000/maps/6", { waitUntil: "domcontentloaded" });
 await page.waitForSelector(".react-flow__edge", { state: "attached", timeout: 30000 });
 await page.waitForTimeout(1500);
 const strokeBefore = await page.evaluate(
@@ -55,9 +54,9 @@ const strokeAfter = await page.evaluate(
   () => getComputedStyle(document.querySelector(".react-flow__edge-path")).stroke,
 );
 
-// â”€â”€ ë¹„êµ í™”ë©´ ë‚´ë³´ë‚´ê¸° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ ë¹„êµ ?”ë©´ ?´ë³´?´ê¸° ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
 await page.evaluate(() => { window.__png = null; });
-await page.goto("http://localhost:3000/maps/6/compare", { waitUntil: "domcontentloaded" });
+await page.goto("http://localhost:7000/maps/6/compare", { waitUntil: "domcontentloaded" });
 await page.waitForSelector(".react-flow__edge", { state: "attached", timeout: 30000 });
 await page.waitForTimeout(2000);
 await page.getByRole("button", { name: "Export" }).click();

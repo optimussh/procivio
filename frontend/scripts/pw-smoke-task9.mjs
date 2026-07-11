@@ -1,25 +1,23 @@
-// Task 9 시각 스모크 — 하위프로세스 인스펙터에서 follow-latest 체크박스가 렌더되는지,
-// 토글 시 콘솔 오류가 없는지, 엣지 sourceHandle 라운드트립이 백엔드에서 유지되는지 실측.
-// 실행: node scripts/pw-smoke-task9.mjs  (playwright-core, 서버 8000/3000 기동 전제)
+// Task 9 ?�각 ?�모?????�위?�로?�스 ?�스?�터?�서 follow-latest 체크박스가 ?�더?�는지,
+// ?��? ??콘솔 ?�류가 ?�는지, ?��? sourceHandle ?�운?�트립이 백엔?�에???��??�는지 ?�측.
+// ?�행: node scripts/pw-smoke-task9.mjs  (playwright-core, ?�버 8000/3000 기동 ?�제)
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext();
-// dev 로그인 우회 — DevGate가 읽는 localStorage 키를 선주입
-await ctx.addInitScript(() => {
+// dev 로그???�회 ??DevGate가 ?�는 localStorage ?��? ?�주??await ctx.addInitScript(() => {
   window.localStorage.setItem("bpm.devUser", "admin");
 });
 const page = await ctx.newPage();
 const errors = [];
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 
-await page.goto("http://localhost:3000/maps/3", { waitUntil: "domcontentloaded" });
+await page.goto("http://localhost:7000/maps/3", { waitUntil: "domcontentloaded" });
 await page.waitForSelector(".react-flow__node", { timeout: 30000 });
-await page.waitForTimeout(2000); // 측정/레이아웃 + resolved 선로드 안정화
-
-// (a) "주문 처리" subprocess 노드 선택 — inspector에서 follow-latest 체크박스 확인
+await page.waitForTimeout(2000); // 측정/?�이?�웃 + resolved ?�로???�정??
+// (a) "주문 처리" subprocess ?�드 ?�택 ??inspector?�서 follow-latest 체크박스 ?�인
 const orderNode = page.locator(".react-flow__node", { hasText: "주문 처리" }).first();
 let nodeFound = false;
 let checkboxFound = false;
@@ -29,13 +27,12 @@ const errorsAfterToggle = [];
 try {
   await orderNode.click({ timeout: 5000 });
   nodeFound = true;
-  await page.waitForTimeout(500); // inspector 렌더 대기
-} catch {
+  await page.waitForTimeout(500); // inspector ?�더 ?��?} catch {
   nodeFound = false;
 }
 
 if (nodeFound) {
-  // follow-latest 라벨 검색 — 인스펙터에 "Follow" 또는 "추종" 텍스트가 있는 체크박스
+  // follow-latest ?�벨 검?????�스?�터??"Follow" ?�는 "추종" ?�스?��? ?�는 체크박스
   const labels = await page.$$eval("label", (els) =>
     els.map((el) => ({ text: el.textContent?.trim() ?? "", hasCheckbox: !!el.querySelector('input[type="checkbox"]') }))
   );
@@ -45,8 +42,7 @@ if (nodeFound) {
   if (checkboxFound) {
     const errsBefore = errors.length;
     try {
-      // 라벨을 직접 DOM 클릭으로 토글 (opacity-0 우회) — safe eval: 로컬 DOM 조작만
-      await page.evaluate(() => {
+      // ?�벨??직접 DOM ?�릭?�로 ?��? (opacity-0 ?�회) ??safe eval: 로컬 DOM 조작�?      await page.evaluate(() => {
         const labels = [...document.querySelectorAll("label")];
         const target = labels.find((l) => l.textContent?.includes("Follow") || l.textContent?.includes("추종"));
         const cb = target?.querySelector('input[type="checkbox"]');
@@ -55,7 +51,7 @@ if (nodeFound) {
       await page.waitForTimeout(500);
       checkboxToggled = true;
       errorsAfterToggle.push(...errors.slice(errsBefore));
-      // 원복
+      // ?�복
       await page.evaluate(() => {
         const labels = [...document.querySelectorAll("label")];
         const target = labels.find((l) => l.textContent?.includes("Follow") || l.textContent?.includes("추종"));
@@ -68,19 +64,18 @@ if (nodeFound) {
   }
 }
 
-// (b) 엣지 sourceHandle 라운드트립 — REST API 직접 확인
-// map 3 version 3의 그래프를 GET → source_handle="취소" 엣지가 있는지 확인
-// (seed에서 이미 심어진 값 — 백엔드가 보존했는지 확인)
+// (b) ?��? sourceHandle ?�운?�트�???REST API 직접 ?�인
+// map 3 version 3??그래?��? GET ??source_handle="취소" ?��?가 ?�는지 ?�인
+// (seed?�서 ?��? ?�어�?�???백엔?��? 보존?�는지 ?�인)
 let roundtripOk = false;
 try {
   const graphResp = await fetch("http://localhost:8000/api/versions/3/graph");
   const graph = await graphResp.json();
-  // seed 엣지 c-e4: source_handle="취소" 이 있어야 함
-  const cancelEdge = graph.edges?.find((e) => e.source_handle === "취소");
+  // seed ?��? c-e4: source_handle="취소" ???�어????  const cancelEdge = graph.edges?.find((e) => e.source_handle === "취소");
   if (cancelEdge) {
     roundtripOk = true;
   } else {
-    // 없으면 직접 PUT/GET 라운드트립으로 확인
+    // ?�으�?직접 PUT/GET ?�운?�트립으�??�인
     if (graph.edges && graph.edges.length > 0) {
       const testEdge = { ...graph.edges[0], source_handle: "test-handle-9" };
       const modified = { ...graph, edges: [testEdge, ...graph.edges.slice(1)] };

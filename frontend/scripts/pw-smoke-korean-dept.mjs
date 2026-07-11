@@ -1,15 +1,15 @@
-// 부서 한글명 매핑 스모크 — 부서 탭: korean dept 열 + 명단 툴팁(이름 필, 1열) e2e.
-// 실행: frontend/ 에서 node scripts/pw-smoke-korean-dept.mjs
-// 전제: 워크트리 backend(:8001)+frontend(:3000, BACKEND_URL=8001) 기동.
-// 재실행 전제: sqlite3 backend/dev.db "UPDATE employees SET korean_name='', korean_dept='';" 로 리셋.
+// 부???��?�?매핑 ?�모????부???? korean dept ??+ 명단 ?�팁(?�름 ?? 1?? e2e.
+// ?�행: frontend/ ?�서 node scripts/pw-smoke-korean-dept.mjs
+// ?�제: ?�크?�리 backend(:8001)+frontend(:3000, BACKEND_URL=8001) 기동.
+// ?�실???�제: sqlite3 backend/dev.db "UPDATE employees SET korean_name='', korean_dept='';" �?리셋.
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+const BASE = process.env.BASE_URL ?? "http://localhost:7000";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` ??${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -24,7 +24,7 @@ page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text());
 });
 
-// 준비: 2인 이상 부서 하나 골라 두 유저에 서로 다른 korean_dept 시드(임포트 API 경유)
+// 준�? 2???�상 부???�나 골라 ???��????�로 ?�른 korean_dept ?�드(?�포??API 경유)
 await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" });
 const dir = await page.evaluate(async () => {
   const res = await fetch("/api/admin/users", { headers: { "X-Dev-User": "admin.sys" } });
@@ -51,7 +51,7 @@ await page.evaluate(
       body: JSON.stringify({
         mode: "overwrite",
         entries: {
-          [a]: { name: "김하나", dept: "그룹시안" },
+          [a]: { name: "김?�나", dept: "그룹?�안" },
           [b]: { name: "박둘", dept: "그룹구안" },
         },
       }),
@@ -61,8 +61,8 @@ await page.evaluate(
 );
 check("seeded divergent korean_dept", true, `dept=${deptLeaf}`);
 
-// ① 부서 탭 진입 — korean dept 열 + 대상 부서 행 2필 확인.
-// 매핑 필터가 없어졌으므로 대상 행은 25행 청킹 뒤에 있을 수 있음 — 안 보이면 스크롤로 센티널을 밀어 추가 로드.
+// ??부????진입 ??korean dept ??+ ?�??부????2???�인.
+// 매핑 ?�터가 ?�어졌으므�??�???��? 25??�?�� ?�에 ?�을 ???�음 ????보이�??�크롤로 ?�티?�을 밀??추�? 로드.
 await page.getByRole("button", { name: "Departments", exact: true }).click();
 await page.waitForSelector('[data-id="dept-row"]');
 check("dept tab entered", true);
@@ -73,13 +73,13 @@ for (let i = 0; i < 20 && (await targetRow.count()) === 0; i++) {
 }
 await targetRow.waitFor({ timeout: 10000 });
 const cellText = await targetRow.locator('[data-id="dept-kr-cell"]').innerText();
-check("two korean-dept pills", cellText.includes("그룹시안") && cellText.includes("그룹구안"));
+check("two korean-dept pills", cellText.includes("그룹?�안") && cellText.includes("그룹구안"));
 
-// ② 인원수 호버 → 명단 툴팁(이름 필, 1열)
+// ???�원???�버 ??명단 ?�팁(?�름 ?? 1??
 await targetRow.locator(".cursor-help").hover();
 await page.waitForSelector('[data-id="dept-roster-tooltip"]');
 const roster = await page.locator('[data-id="dept-roster-tooltip"]').innerText();
-check("roster tooltip shows names", roster.includes("김하나") || roster.includes(members[0].name));
+check("roster tooltip shows names", roster.includes("김?�나") || roster.includes(members[0].name));
 
 check("no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
 

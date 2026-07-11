@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — Remove Keycloak · frontend port 7000
+- OIDC/Keycloak 코드·의존성·env 전부 제거. 로그인 피커 + `X-Dev-User` only
+- frontend dev/start 포트 **7000**, Docker/nginx 정렬. README·deploy·CLAUDE 갱신
+
 ## 2026-07-11 — Architecture ontology O1–O3 (feat/architecture-ontology-o1-o3)
 - 스펙(한글): `docs/superpowers/specs/2026-07-11-architecture-ontology-o1-o3-design.md`
 - O1 `GET /structure/gaps` — 트리↔CA 갭 리포트

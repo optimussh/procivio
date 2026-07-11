@@ -1,10 +1,9 @@
-// Issue 1 스모크 — 펼침 영역을 가로질러(우→좌) 루트 노드를 드래그해 빈 공간에 드롭하면 드롭 지점에
-// 정확히 안착하는지(드래그 시작 오프셋이 아닌 드롭 위치 오프셋으로 환산) 실측.
-// map 3에서 c-order(주문 처리)를 펼치면 그 오른쪽에 임베드 레인이 생긴다. 루트 c-done(이행 완료, 레인 우측)을
-// 레인 왼쪽 빈 공간으로 끌어 드롭 → 표시중심이 커서 드롭점 ~반노드폭(화면) 이내여야. 버그면 드롭 직후 노드가
-// footprint(수백 flow)만큼 왼쪽으로 튄다(saved를 시작오프셋으로 환산 → 재파생 표시가 빗나감). 새로고침 후도 영속 일치.
-// 콘솔 에러 0.  devUser: user.choi(체크아웃 보유자) — task7-drag와 동일.
-// 실행: node scripts/pw-smoke-issue1-crossdrag.mjs  (playwright-core, 서버 8000/3000 기동 전제)
+// Issue 1 ?�모?????�침 ?�역??가로질???�→�? 루트 ?�드�??�래그해 �?공간???�롭?�면 ?�롭 지?�에
+// ?�확???�착?�는지(?�래�??�작 ?�프?�이 ?�닌 ?�롭 ?�치 ?�프?�으�??�산) ?�측.
+// map 3?�서 c-order(주문 처리)�??�치�?�??�른쪽에 ?�베???�인???�긴?? 루트 c-done(?�행 ?�료, ?�인 ?�측)??// ?�인 ?�쪽 �?공간?�로 ?�어 ?�롭 ???�시중심??커서 ?�롭??~반노?�폭(?�면) ?�내?�야. 버그�??�롭 직후 ?�드가
+// footprint(?�백 flow)만큼 ?�쪽?�로 ?�다(saved�??�작?�프?�으�??�산 ???�파???�시가 빗나�?. ?�로고침 ?�도 ?�속 ?�치.
+// 콘솔 ?�러 0.  devUser: user.choi(체크?�웃 보유?? ??task7-drag?� ?�일.
+// ?�행: node scripts/pw-smoke-issue1-crossdrag.mjs  (playwright-core, ?�버 8000/3000 기동 ?�제)
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -61,7 +60,7 @@ async function expandAndZoom() {
   await page.waitForTimeout(700);
 }
 
-await page.goto("http://localhost:3000/maps/3", { waitUntil: "domcontentloaded" });
+await page.goto("http://localhost:7000/maps/3", { waitUntil: "domcontentloaded" });
 await page.waitForSelector('.react-flow__node[data-id="c-done"]', { timeout: 30000 });
 await page.waitForTimeout(2500);
 
@@ -69,7 +68,7 @@ const editable = await page.evaluate(() =>
   document.querySelector('.react-flow__node[data-id="c-start"]').classList.contains("draggable"),
 );
 if (!editable) {
-  console.log("NOT EDITABLE (read-only) — checkout held by another user; cannot exercise drag.");
+  console.log("NOT EDITABLE (read-only) ??checkout held by another user; cannot exercise drag.");
   await browser.close();
   process.exit(1);
 }
@@ -77,17 +76,17 @@ if (!editable) {
 await expandAndZoom();
 const lane = await rdLaneScreen();
 if (!lane) {
-  console.log("NO LANE FOUND — expansion did not render embed region.");
+  console.log("NO LANE FOUND ??expansion did not render embed region.");
   await browser.close();
   process.exit(1);
 }
 console.log("lane screen x-band:", JSON.stringify({ left: Math.round(lane.left), right: Math.round(lane.right) }));
 
-// c-done(레인 우측) 을 레인 왼쪽 빈 공간으로 드래그 — 경계를 우→좌로 가로지른다.
+// c-done(?�인 ?�측) ???�인 ?�쪽 �?공간?�로 ?�래�???경계�??�→좌로 가로�?른다.
 const boxD = await page.locator('.react-flow__node[data-id="c-done"]').boundingBox();
 const startX = boxD.x + boxD.width / 2;
 const startY = boxD.y + boxD.height / 2;
-// 목표: 레인 왼쪽으로 충분히(레인 left 보다 100px 더 왼쪽), 세로는 위로 살짝(다른 노드/존링 회피).
+// 목표: ?�인 ?�쪽?�로 충분???�인 left 보다 100px ???�쪽), ?�로???�로 ?�짝(?�른 ?�드/존링 ?�피).
 const dropX = Math.max(lane.left - 120, 60);
 const dropY = Math.max(startY - 140, lane.top + 20);
 await page.mouse.move(startX, startY);
@@ -97,29 +96,29 @@ await page.mouse.move(dropX, dropY, { steps: 10 });
 await page.mouse.up();
 await page.waitForTimeout(900);
 
-// 드롭 직후 표시중심이 커서 드롭점에 대응? (반노드폭 화면 이내) — 버그면 footprint*zoom 만큼 왼쪽으로 튐.
+// ?�롭 직후 ?�시중심??커서 ?�롭?�에 ?�?? (반노?�폭 ?�면 ?�내) ??버그�?footprint*zoom 만큼 ?�쪽?�로 ??
 const landedBox = await page.locator('.react-flow__node[data-id="c-done"]').boundingBox();
 const landedCx = landedBox.x + landedBox.width / 2;
 const landedCy = landedBox.y + landedBox.height / 2;
 const screenMiss = Math.hypot(landedCx - dropX, landedCy - dropY);
-const followOk = screenMiss <= 30; // 줌≈0.2 → 한 노드폭≈18px. footprint(~900flow)면 ~180px 빗나감.
+const followOk = screenMiss <= 30; // 줌≈0.2 ?????�드??��18px. footprint(~900flow)�?~180px 빗나�?
 console.log(
-  "cross-boundary drop: landed screen center vs cursor — miss(px)=",
+  "cross-boundary drop: landed screen center vs cursor ??miss(px)=",
   Math.round(screenMiss),
   "followOk=",
   followOk,
   "(landed cx=" + Math.round(landedCx) + " dropX=" + Math.round(dropX) + ")",
 );
 
-// 영속 — 새로고침 후(펼침 유지 안 됨, 저장좌표=표시) c-done 표시 x가 레인 왼쪽(드롭한 쪽)인지: c-start(80)보다 작거나 비슷.
+// ?�속 ???�로고침 ???�침 ?��? ???? ?�?�좌???�시) c-done ?�시 x가 ?�인 ?�쪽(?�롭??�??��?: c-start(80)보다 ?�거??비슷.
 await page.waitForTimeout(AUTOSAVE_WAIT);
 await page.reload({ waitUntil: "domcontentloaded" });
 await page.waitForSelector('.react-flow__node[data-id="c-done"]', { timeout: 30000 });
 await page.waitForTimeout(2500);
 const reloadDone = await rdNode("c-done");
 const reloadStart = await rdNode("c-start");
-// 드롭을 레인 왼쪽(=c-start 부근 또는 더 왼쪽)으로 했으니 저장 x도 그 근처여야. 버그면 footprint만큼 더 왼쪽(음수 큼).
-// 영속 일치 = 새로고침 표시가 드롭 직후 표시(saved)와 footprint 차 없이 일관 — 여기선 드롭 위치가 c-start 부근 이내인지로 근사.
+// ?�롭???�인 ?�쪽(=c-start 부�??�는 ???�쪽)?�로 ?�으???�??x??�?근처?�야. 버그�?footprint만큼 ???�쪽(?�수 ??.
+// ?�속 ?�치 = ?�로고침 ?�시가 ?�롭 직후 ?�시(saved)?� footprint �??�이 ?��? ???�기???�롭 ?�치가 c-start 부�??�내?��?�?근사.
 const persistedNearDrop = reloadDone.fx < reloadStart.fx + 200 && reloadDone.fx > reloadStart.fx - 400;
 console.log(
   "persisted near drop (reload c-done.fx within sane band of c-start):",

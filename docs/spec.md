@@ -82,13 +82,13 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 ### 3.5 맵 목록
 - 전체 맵 목록 (이름·설명·버전 수·수정일), 생성/삭제
 
-## 4. 인증 — Keycloak (OIDC)
+## 4. 인증 — 로그인 피커 (Keycloak/OIDC 없음)
 
-- 같은 배포 서버의 Keycloak 사용: realm `ai-portal` (주소는 `.env`로 관리, 예: `http://182.199.63.71:8080/realms/ai-portal`)
-- frontend: OIDC Authorization Code + PKCE 로그인(`react-oidc-context`) → backend API 호출 시 Bearer 토큰
-- backend: realm JWKS로 RS256 서명 검증(`pyjwt[crypto]`) 후 사용자 식별 — `created_by`에 기록
-- **우회 플래그(확정)**: `AUTH_ENABLED`(backend) / `NEXT_PUBLIC_AUTH_ENABLED`(frontend). 로컬 네이티브는 미설정(우회), 서버 compose는 `true`. `/api/health`는 항상 인증 면제
-- Keycloak에 public(PKCE) 클라이언트 등록 필요 — client_id `KEYCLOAK_CLIENT_ID`(예: `bpm-frontend`), redirect_uri는 앱 origin
+- frontend: 직원/시드 유저 피커 → localStorage + 모든 API에 `X-Dev-User: <loginId>`
+- backend: `X-Dev-User`(또는 `Authorization: Bearer <loginId>` 평문)로 식별. JWT 검증 없음
+- **`AUTH_ENABLED`**: false(기본)=헤더 없으면 `dev_user` 폴백 · true=헤더 필수 + 실제 RBAC
+- **`DEV_ENFORCE_PERMISSIONS`**: auth OFF에서도 역할 강제 시뮬레이션
+- `/api/health`는 항상 인증 면제
 
 ## 5. 기술 스택 / 배포
 
@@ -99,8 +99,8 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 | db | PostgreSQL | |
 | proxy | nginx — **서버 노출 포트 3333** | `/` → frontend, `/api` → backend |
 
-- 접속: 우선 `http://<서버IP or app.procivio.com>:3333` 포트 직접 접속 → 추후 서버 엣지 nginx(직접 편집 가능)에 도메인 라우팅 추가
-- Keycloak(8080)은 이 compose 외부의 기존 서비스 — 주소는 `.env`로만 참조
+- 접속: 우선 `http://<서버IP or app.procivio.com>:3333` 포트 직접 접속 → 추후 서버 엣지 nginx에 도메인 라우팅 추가
+- 로컬 frontend 개발 포트: **7000** (`npm run dev`)
 
 ## 6. 단계별 구현 순서 (제안)
 

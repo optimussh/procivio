@@ -801,7 +801,7 @@ const en = {
   "perm.details.templateSaved": "Template setting saved.",
   "legend.menuKeys": "Right-click menu keys",
   "login.title": "Sign in to Procivio",
-  "login.keycloak": "Sign in with Keycloak",
+
   "login.dev": "Sign in with a test account",
   "login.devPick": "Pick a test user",
   "login.devSearch": "Search name, id, or org...",
@@ -2239,7 +2239,7 @@ const ko: Record<MessageKey, string> = {
   "perm.details.templateSaved": "템플릿 설정을 저장했습니다.",
   "legend.menuKeys": "우클릭 메뉴 키",
   "login.title": "Procivio 로그인",
-  "login.keycloak": "Keycloak으로 로그인",
+
   "login.dev": "임시 아이디로 로그인",
   "login.devPick": "임시 사용자 선택",
   "login.devSearch": "이름·아이디·조직 검색...",

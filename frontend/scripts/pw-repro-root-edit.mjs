@@ -1,17 +1,17 @@
-// 재현 — 하위프로세스 펼친 상태에서 ROOT 노드가 여전히 편집(드래그) 가능한지 실측.
-// 루트 노드 c-done(이행 완료)을 펼침 전/후로 opacity·transform 비교 + 실제 드래그.
+// ?�현 ???�위?�로?�스 ?�친 ?�태?�서 ROOT ?�드가 ?�전???�집(?�래�? 가?�한지 ?�측.
+// 루트 ?�드 c-done(?�행 ?�료)???�침 ???�로 opacity·transform 비교 + ?�제 ?�래�?
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
-// 펼치면 footprint shift로 루트 노드가 우측으로 밀려 기본 뷰포트를 벗어난다 → 넉넉한 뷰포트 + fitView로 화면 안에 둔다.
+// ?�치�?footprint shift�?루트 ?�드가 ?�측?�로 밀??기본 뷰포?��? 벗어?�다 ???�넉??뷰포??+ fitView�??�면 ?�에 ?�다.
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
 await ctx.addInitScript(() => window.localStorage.setItem("bpm.devUser", "admin"));
 const page = await ctx.newPage();
 const errors = [];
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 
-await page.goto("http://localhost:3000/maps/3", { waitUntil: "domcontentloaded" });
+await page.goto("http://localhost:7000/maps/3", { waitUntil: "domcontentloaded" });
 await page.waitForSelector('.react-flow__node[data-id="c-done"]', { timeout: 30000 });
 await page.waitForTimeout(2000);
 
@@ -24,13 +24,13 @@ const readRoot = () => page.evaluate(() => {
 
 const beforeExpand = await readRoot();
 
-// 주문 처리(c-order) 펼침
+// 주문 처리(c-order) ?�침
 const orderNode = page.locator('.react-flow__node[data-id="c-order"]').first();
 await orderNode.hover();
 await page.waitForTimeout(200);
 let clicked = false;
 try {
-  await orderNode.locator('button[title*="ubprocess"], button[title*="펼치기"]').first().click({ timeout: 4000, force: true });
+  await orderNode.locator('button[title*="ubprocess"], button[title*="?�치�?]').first().click({ timeout: 4000, force: true });
   clicked = true;
 } catch {
   clicked = await page.evaluate(() => {
@@ -45,8 +45,8 @@ await page.waitForTimeout(2000);
 
 const afterExpand = await readRoot();
 
-// 펼침 후 c-done이 우측으로 밀려 화면 밖일 수 있다 → ctrl+휠로 줌아웃해 전체 폭을 화면 안에 넣는다.
-// (RF는 ctrl+wheel을 줌으로 처리. 앱 fitView 컨트롤은 줌 유지·좌상단 정렬이라 넓은 콘텐츠를 못 담음.)
+// ?�침 ??c-done???�측?�로 밀???�면 밖일 ???�다 ??ctrl+?�로 줌아?�해 ?�체 ??�� ?�면 ?�에 ?�는??
+// (RF??ctrl+wheel??줌으�?처리. ??fitView 컨트롤�? �??��?·좌상???�렬?�라 ?��? 콘텐츠�? �??�음.)
 const pane = await page.locator(".react-flow__pane").boundingBox();
 if (pane) {
   const cx = pane.x + pane.width / 2;
@@ -54,14 +54,13 @@ if (pane) {
   await page.mouse.move(cx, cy);
   await page.keyboard.down("Control");
   for (let i = 0; i < 5; i++) {
-    await page.mouse.wheel(0, 200); // 양수 deltaY + ctrl = 줌아웃
-    await page.waitForTimeout(70);
+    await page.mouse.wheel(0, 200); // ?�수 deltaY + ctrl = 줌아??    await page.waitForTimeout(70);
   }
   await page.keyboard.up("Control");
 }
 await page.waitForTimeout(600);
 
-// 실제 드래그 — c-done을 좌상단으로(화면 안쪽 방향) 이동
+// ?�제 ?�래�???c-done??좌상?�으�??�면 ?�쪽 방향) ?�동
 const box = await page.locator('.react-flow__node[data-id="c-done"]').boundingBox();
 const onScreen = box && box.x > 0 && box.x < 1400 && box.y > 0 && box.y < 900;
 let dragMoved = false;

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Procivio — 프로세스 지식 플랫폼 (Interview → Structure → Map).** 현업이 노드/엣지로 계층형 프로세스 흐름을 시각적으로 작성·편집하고, As-Is/To-Be를 버전으로 관리·비교하는 도구. **기능 명세: `docs/spec.md`**, 브랜드: `docs/brand/procivio.md`.
 
-> 상태(메인 기준): ⑤ Keycloak 인증 · ⑥ docker-compose 배포(3333) · ⑦ **하위프로세스 참조 모델(Call Activity)** — 인라인 계층 편집(`parent_node_id`) 폐기, 평면 노드 + 다른 맵 링크(읽기전용 임베드) · ⑧ **권한 관리(RBAC) 백엔드**(맵 가시성·협업자·승인자·버전 워크플로·유저그룹) · ⑨ **플로우 규칙(F1 디시전 드롭·F14 흐름 하이라이트)·Settings v2(가시성 스테이징·승인자 카드)·맵 소프트삭제+휴지통·타임스탬프 KST(`backend/app/clock.py`)·로그인 기록(`login_records`)·역할/상태 i18n 영어 고정** 머지 완료. 진행 현황은 `PROGRESS.md`, 구현 순서는 `docs/spec.md` §6.
+> 상태(메인 기준): 로그인 피커(`X-Dev-User`, **Keycloak 제거**) · docker-compose 배포(3333) · Call Activity · RBAC · Structure L1–L5 · AI 디스커버리(P0–P4) · 아키텍처 O1–O3 · BPMN subset. 진행: `PROGRESS.md`, 명세: `docs/spec.md`.
 > DB: 로컬 네이티브는 sqlite 파일(무설정), 서버 compose는 postgres. 스키마는 startup `create_all`(마이그레이션 후속). **DB 초기화·데모 시드: `docs/db-seed.md`**(`python -m scripts.reset_db`).
 > ⚠️ **캔버스/에디터 작업 전 `docs/lessons/`(시행착오 방지)를 먼저 읽을 것** — 아래 "Lessons" 섹션. (단, 인라인 계층 *편집*은 ⑦에서 제거됨 → 읽기전용 임베드. lessons는 React Flow/좌표/검증 함정 위주로 유효.)
 
@@ -26,7 +26,7 @@ uv venv .venv && uv pip install --python .venv/bin/python -r requirements-dev.tx
 
 # frontend (frontend/ 에서, 로컬 네이티브)
 npm install
-npm run dev    # 개발 서버 :3000 — /api는 BACKEND_URL(기본 localhost:8000)로 프록시
+npm run dev    # 개발 서버 :7000 — /api는 BACKEND_URL(기본 localhost:8000)로 프록시
 npm run build  # 프로덕션 빌드 (standalone)
 npm run lint
 ```
@@ -59,7 +59,7 @@ docker compose up -d --build   # 접속: http://<서버>:3333
 | 레이어 | 스택 | 역할 |
 |--------|------|------|
 | **frontend** | Next.js (TypeScript, React) + @xyflow/react | 프로세스맵 에디터 UI — 캔버스/노드/엣지 편집, 계층 오버레이, 버전 비교 |
-| **backend** | Python — FastAPI + SQLAlchemy + Pydantic | 맵/버전/노드/엣지 CRUD·검증·영속화 API, Keycloak JWT 검증 |
+| **backend** | Python — FastAPI + SQLAlchemy + Pydantic | 맵/버전/노드/엣지 CRUD·검증·영속화 API, X-Dev-User 식별 |
 | **db** | PostgreSQL | 맵·버전·노드·엣지 영속 저장 |
 | **proxy** | nginx | 앱 내부 리버스 프록시 — `/` → frontend, `/api` → backend 라우팅. **서버 노출 포트 3333** |
 
@@ -67,7 +67,7 @@ docker compose up -d --build   # 접속: http://<서버>:3333
 
 **nginx 토폴로지 (확정):** 서버 엣지 nginx(443/80)는 직접 편집 가능한 별도 자산. 앱 compose nginx는 **3333**에 노출하고 우선 포트로 직접 접속, 추후 엣지 nginx에 도메인(app.procivio.com 등) 라우팅 추가.
 
-**인증 (확정):** 같은 서버의 기존 Keycloak(realm `ai-portal`) OIDC 사용. 주소는 하드코딩 금지 — `.env` 경유 (`docs/spec.md` §4).
+**인증 (확정):** Keycloak/OIDC 없음. 로그인 피커 + `X-Dev-User` 헤더. `AUTH_ENABLED` / `DEV_ENFORCE_PERMISSIONS` 로 RBAC 강도 조절.
 
 **디렉터리 구조:**
 ```
@@ -100,7 +100,7 @@ docker-compose.yml
 | **줄바꿈은 LF 고정** | Windows PC 경유 시 CRLF 오염 → Linux/Docker에서 스크립트·빌드 깨짐 | `.gitattributes`로 `* text=auto eol=lf` 강제 (Windows 전용 스크립트만 CRLF) |
 | **로컬은 Docker 없음** | Windows PC에 Docker 미설치 | frontend/backend는 네이티브 실행 가능해야 함 (`npm run dev`, Python 직접 실행). DB·서비스 주소는 env로 분리 (`rules/backend/config.md`) — 로컬은 로컬 Postgres/원격, 서버는 compose 네트워크 |
 | **앱 nginx는 443/80 미점유** | 서버 엣지 nginx가 이미 443/80 사용 | compose nginx는 **3333** 노출. 우선 포트 직접 접속, 도메인 라우팅은 추후 엣지 nginx에 추가 |
-| **서버는 평문 HTTP(원격 IP)** | 브라우저 secure context 아님(HTTPS·localhost만) → `crypto.subtle`/`crypto.randomUUID` 등 Web Crypto 미동작 | id는 `frontend/src/lib/id.ts`의 `genId()` 사용(`crypto.randomUUID` 금지), Keycloak 로그인은 PKCE 비활성(`disablePKCE`). **localhost는 secure context라 재현 안 됨 — 서버/원격 IP로 검증** |
+| **서버는 평문 HTTP(원격 IP)** | 브라우저 secure context 아님 → `crypto.randomUUID` 등 미동작 | id는 `frontend/src/lib/id.ts`의 `genId()` 사용. **localhost는 재현 안 됨 — 서버/원격 IP로 검증** |
 | **로컬↔서버 실행 경로 이원화** | 로컬=네이티브, 서버=Docker | 같은 코드가 양쪽에서 돌도록 환경 의존 값은 하드코딩 금지, 전부 `.env` 경유 |
 
 **검증 단계:** 로컬 네이티브 실행으로 기능 확인 → 서버 docker-compose로 배포 확인. 로컬에서 통과해도 컨테이너 네트워크/포트/줄바꿈 차이로 서버에서 깨질 수 있으니 양쪽 모두 검증한다.

@@ -1,29 +1,27 @@
-// Task 4 시각 스모크 — subprocess 노드가 새 모양 + 핸들로 렌더되는지 시스템 Chrome으로 실측.
-// 실행: node scripts/pw-smoke-task4.mjs  (playwright-core --no-save 설치 전제, 서버 8000/3000 기동 전제)
+// Task 4 ?�각 ?�모????subprocess ?�드가 ??모양 + ?�들�??�더?�는지 ?�스??Chrome?�로 ?�측.
+// ?�행: node scripts/pw-smoke-task4.mjs  (playwright-core --no-save ?�치 ?�제, ?�버 8000/3000 기동 ?�제)
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext();
-// dev 로그인 우회 — DevGate가 읽는 localStorage 키를 선주입
-await ctx.addInitScript(() => {
+// dev 로그???�회 ??DevGate가 ?�는 localStorage ?��? ?�주??await ctx.addInitScript(() => {
   window.localStorage.setItem("bpm.devUser", "admin");
 });
 const page = await ctx.newPage();
 const errors = [];
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 
-await page.goto("http://localhost:3000/maps/3", { waitUntil: "domcontentloaded" });
-// React Flow 노드가 붙을 때까지
+await page.goto("http://localhost:7000/maps/3", { waitUntil: "domcontentloaded" });
+// React Flow ?�드가 붙을 ?�까지
 await page.waitForSelector(".react-flow__node", { timeout: 30000 });
-await page.waitForTimeout(1500); // 측정/레이아웃 안정화
-
+await page.waitForTimeout(1500); // 측정/?�이?�웃 ?�정??
 const nodeTexts = await page.$$eval(".react-flow__node", (ns) => ns.map((n) => n.textContent?.trim() ?? ""));
 const hasOrder = nodeTexts.some((t) => t.includes("주문 처리"));
 const hasDeliver = nodeTexts.some((t) => t.includes("배송"));
 
-// subprocess 노드(주문 처리)의 핸들 수 — 좌 input + 우 source(들)
+// subprocess ?�드(주문 처리)???�들 ????�?input + ??source(??
 const orderHandles = await page.evaluate(() => {
   const nodes = [...document.querySelectorAll(".react-flow__node")];
   const order = nodes.find((n) => n.textContent?.includes("주문 처리"));

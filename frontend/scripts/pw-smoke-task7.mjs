@@ -1,7 +1,7 @@
-// Task 7 스모크 — 하위프로세스 읽기전용 딥뷰 드릴인 검증.
-// map 3에서 하위프로세스 c-order(주문 처리)를 더블클릭 → 링크맵(주문 처리) 노드들이 읽기전용 활성 영역으로 열린다.
-// 검증: 드릴 노드(검토) 표시·비드래그, 조상(루트) 컨텍스트 dim, 브레드크럼 2단계, 루트 복귀 시 편집 재개·펼침 유지, 콘솔 에러 0.
-// 실행: node scripts/pw-smoke-task7.mjs  (playwright-core, 서버 8000/3000 기동 전제)
+// Task 7 ?�모?????�위?�로?�스 ?�기?�용 ?�뷰 ?�릴??검�?
+// map 3?�서 ?�위?�로?�스 c-order(주문 처리)�??�블?�릭 ??링크�?주문 처리) ?�드?�이 ?�기?�용 ?�성 ?�역?�로 ?�린??
+// 검�? ?�릴 ?�드(검?? ?�시·비드?�그, 조상(루트) 컨텍?�트 dim, 브레?�크??2?�계, 루트 복�? ???�집 ?�개·?�침 ?��?, 콘솔 ?�러 0.
+// ?�행: node scripts/pw-smoke-task7.mjs  (playwright-core, ?�버 8000/3000 기동 ?�제)
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -17,7 +17,7 @@ page.on("console", (m) => {
   if (m.type() === "error") errors.push(m.text());
 });
 
-await page.goto("http://localhost:3000/maps/3", { waitUntil: "domcontentloaded" });
+await page.goto("http://localhost:7000/maps/3", { waitUntil: "domcontentloaded" });
 await page.waitForSelector('.react-flow__node[data-id="c-order"]', { timeout: 30000 });
 await page.waitForTimeout(2000);
 
@@ -26,13 +26,12 @@ const breadcrumbTitles = () =>
 
 const crumbsBefore = await breadcrumbTitles();
 
-// 더블클릭 직전 카메라(뷰포트) 기록 — 드릴인이 카메라를 크게 점프시키지 않아야 함.
+// ?�블?�릭 직전 카메??뷰포?? 기록 ???�릴?�이 카메?��? ?�게 ?�프?�키지 ?�아????
 const vpBefore = await page.evaluate(
   () => document.querySelector(".react-flow__viewport")?.style.transform ?? "",
 );
 
-// 1. 하위프로세스 c-order(주문 처리) 더블클릭 → 읽기전용 딥뷰 드릴인
-const orderNode = page.locator('.react-flow__node[data-id="c-order"]').first();
+// 1. ?�위?�로?�스 c-order(주문 처리) ?�블?�릭 ???�기?�용 ?�뷰 ?�릴??const orderNode = page.locator('.react-flow__node[data-id="c-order"]').first();
 const orderBox = await orderNode.boundingBox();
 await page.mouse.dblclick(orderBox.x + orderBox.width / 2, orderBox.y + orderBox.height / 2);
 await page.waitForTimeout(2000);
@@ -42,7 +41,7 @@ const vpAfter = await page.evaluate(
   () => document.querySelector(".react-flow__viewport")?.style.transform ?? "",
 );
 
-// 드릴인하면 링크맵(주문 처리)의 노드(검토)가 활성 영역으로 등장. 네임스페이스 id = c-order/a-review.
+// ?�릴?�하�?링크�?주문 처리)???�드(검??가 ?�성 ?�역?�로 ?�장. ?�임?�페?�스 id = c-order/a-review.
 const drilledNode = await page.evaluate(() => {
   const el = document.querySelector('.react-flow__node[data-id="c-order/a-review"]');
   if (!el) return null;
@@ -56,21 +55,21 @@ const drilledNode = await page.evaluate(() => {
   };
 });
 
-// 조상(루트) 컨텍스트 — 루트 프레임 노드(이행 완료=c-done)는 dim(opacity<1)으로 감싸 보임.
+// 조상(루트) 컨텍?�트 ??루트 ?�레???�드(?�행 ?�료=c-done)??dim(opacity<1)?�로 감싸 보임.
 const ancestorDim = await page.evaluate(() => {
   const el = document.querySelector('.react-flow__node[data-id="c-done"]');
   if (!el) return null;
   return { present: true, opacity: getComputedStyle(el).opacity };
 });
 
-// 카메라 점프 없음 — 뷰포트 scale이 동일(드릴인은 offset만 보정, 줌 불변).
+// 카메???�프 ?�음 ??뷰포??scale???�일(?�릴?��? offset�?보정, �?불�?).
 const scaleOf = (t) => {
   const m = t.match(/scale\(([^)]+)\)/);
   return m ? parseFloat(m[1]) : 1;
 };
 const noCameraJump = Math.abs(scaleOf(vpBefore) - scaleOf(vpAfter)) < 0.05;
 
-// 2. 드릴 노드는 읽기전용 — 드래그 시도 후 위치 불변
+// 2. ?�릴 ?�드???�기?�용 ???�래�??�도 ???�치 불�?
 let drillNotDraggable = true;
 const dn = page.locator('.react-flow__node[data-id="c-order/a-review"]').first();
 const dnBox = await dn.boundingBox();
@@ -86,20 +85,19 @@ if (dnBox) {
   const t1 = await page.evaluate(
     () => document.querySelector('.react-flow__node[data-id="c-order/a-review"]')?.style.transform,
   );
-  drillNotDraggable = t0 === t1; // 읽기전용이면 드래그해도 위치 그대로
-}
+  drillNotDraggable = t0 === t1; // ?�기?�용?�면 ?�래그해???�치 그�?�?}
 
-// 3. 브레드크럼 루트 크럼 클릭 → 루트 편집 재개, 펼침(c-order 자식) 유지
+// 3. 브레?�크??루트 ?�럼 ?�릭 ??루트 ?�집 ?�개, ?�침(c-order ?�식) ?��?
 await page.locator("header nav button").first().click();
 await page.waitForTimeout(1500);
 const crumbsBack = await breadcrumbTitles();
-// 루트로 복귀하면 루트 노드(c-order)가 다시 프레임 노드로 잡혀 드래그 가능(draggable, not nodrag).
+// 루트�?복�??�면 루트 ?�드(c-order)가 ?�시 ?�레???�드�??��? ?�래�?가??draggable, not nodrag).
 const rootEditableAgain = await page.evaluate(() => {
   const el = document.querySelector('.react-flow__node[data-id="c-order"]');
   if (!el) return false;
   return el.classList.contains("draggable") && !el.classList.contains("nodrag");
 });
-// 펼침 유지 — c-order의 자식(검토=c-order/a-review)이 여전히 인라인으로 보임.
+// ?�침 ?��? ??c-order???�식(검??c-order/a-review)???�전???�라?�으�?보임.
 const expansionPreserved = await page.evaluate(
   () => document.querySelector('.react-flow__node[data-id="c-order/a-review"]') !== null,
 );

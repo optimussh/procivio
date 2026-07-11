@@ -1,29 +1,26 @@
-// 멤버 카드 스모크 — 홈 상세 패널: Me 뱃지·이름 한/영 토글(펼침 alt 필)·그룹 이름 해석 e2e.
-// 실행: frontend/ 에서 BASE_URL=http://localhost:3002 node scripts/pw-smoke-member-card.mjs
-// 전제: 워크트리 backend(:8001)+frontend(BASE_URL, BACKEND_URL=8001) 기동, dev.db는 메인 사본(맵·멤버 존재).
-// 대상 유저/맵은 스크립트가 매번 새로 생성(admin.sys 소유 테스트맵 + 협업자·그룹 부여)하므로
-// 기존 스모크(korean-names/korean-dept)처럼 재실행 전 리셋이 필수는 아니나, 한글이름 잔존을 피하려면
-// sqlite3 backend/dev.db "UPDATE employees SET korean_name='', korean_dept='';" 후 실행 권장.
-// 정리: 테스트맵은 실행 말미 DELETE /api/maps/{id}로 삭제(소프트삭제→휴지통, 7일 후 자동 퍼지) —
-// 맵 목록엔 남지 않고 dev.db 행만 deleted_at 기록 상태로 퍼지까지 잔류.
+// 멤버 카드 ?�모???????�세 ?�널: Me 뱃�?·?�름 ?????��?(?�침 alt ??·그룹 ?�름 ?�석 e2e.
+// ?�행: frontend/ ?�서 BASE_URL=http://localhost:3002 node scripts/pw-smoke-member-card.mjs
+// ?�제: ?�크?�리 backend(:8001)+frontend(BASE_URL, BACKEND_URL=8001) 기동, dev.db??메인 ?�본(맵·멤�?존재).
+// ?�???��?/맵�? ?�크립트가 매번 ?�로 ?�성(admin.sys ?�유 ?�스?�맵 + ?�업?�·그�?부???��?�?// 기존 ?�모??korean-names/korean-dept)처럼 ?�실????리셋???�수???�니?? ?��??�름 ?�존???�하?�면
+// sqlite3 backend/dev.db "UPDATE employees SET korean_name='', korean_dept='';" ???�행 권장.
+// ?�리: ?�스?�맵?� ?�행 말�? DELETE /api/maps/{id}�???��(?�프?�삭?�→?��??? 7?????�동 ?��?) ??// �?목록???��? ?�고 dev.db ?�만 deleted_at 기록 ?�태�??��?까�? ?�류.
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+const BASE = process.env.BASE_URL ?? "http://localhost:7000";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` ??${detail}` : ""}`);
 };
 const skip = (name, detail = "") => {
   results.push({ name, ok: true });
-  console.log(`SKIP ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`SKIP ${name}${detail ? ` ??${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-// bpm.lang은 addInitScript에 넣지 않음 — addInitScript는 매 navigation(reload 포함)마다 재실행되어
-// ko 전환 후 reload 시 값을 en으로 되돌려버림(i18n은 마운트 시 1회만 localStorage를 읽음, i18n.tsx:24-30).
+// bpm.lang?� addInitScript???��? ?�음 ??addInitScript??�?navigation(reload ?�함)마다 ?�실?�되??// ko ?�환 ??reload ??값을 en?�로 ?�돌?�버�?i18n?� 마운????1?�만 localStorage�??�음, i18n.tsx:24-30).
 await ctx.addInitScript(() => {
   window.localStorage.setItem("bpm.devUser", "admin.sys");
 });
@@ -33,8 +30,7 @@ page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text());
 });
 
-// 준비: admin.sys 소유 테스트맵 생성(Me 뱃지 전제) + 협업자 1명·그룹 1개 부여 + 협업자에 한글이름 임포트
-await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+// 준�? admin.sys ?�유 ?�스?�맵 ?�성(Me 뱃�? ?�제) + ?�업??1명·그�?1�?부??+ ?�업?�에 ?��??�름 ?�포??await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
 await page.evaluate(() => window.localStorage.setItem("bpm.lang", "en"));
 const setup = await page.evaluate(async () => {
   const headers = { "Content-Type": "application/json", "X-Dev-User": "admin.sys" };
@@ -70,7 +66,7 @@ const setup = await page.evaluate(async () => {
   await fetch("/api/employees/korean-names", {
     method: "PUT",
     headers,
-    body: JSON.stringify({ mode: "overwrite", entries: { [collaborator.id]: { name: "홍길동" } } }),
+    body: JSON.stringify({ mode: "overwrite", entries: { [collaborator.id]: { name: "?�길?? } } }),
   });
 
   return { mapId: map.id, mapName: map.name, enName: collaborator.name, group };
@@ -81,53 +77,53 @@ check(
   JSON.stringify(setup),
 );
 
-// ① 홈 진입 → 테스트맵 카드 클릭(패딩 위치 — 중앙은 이름 Link라 내비게이션됨) → 상세 패널
+// ????진입 ???�스?�맵 카드 ?�릭(?�딩 ?�치 ??중앙?� ?�름 Link???�비게이?�됨) ???�세 ?�널
 await page.reload({ waitUntil: "domcontentloaded" });
 await page
   .locator('[data-id="map-card"]', { hasText: setup.mapName })
   .click({ position: { x: 8, y: 8 } });
 const aside = page.locator('[data-id="map-detail-aside"]');
 await aside.locator('[role="button"]').first().waitFor({ timeout: 10000 });
-check("home → map card click → detail aside opened", true);
+check("home ??map card click ??detail aside opened", true);
 
-// Me 뱃지 — admin.sys가 테스트맵 생성자라 명시 owner 권한행 보유.
-// waitFor(현재 로그인 유저는 AuthGate 비동기 로드라 최초 렌더엔 아직 null → isMe 판정이 뒤늦게 갱신됨).
+// Me 뱃�? ??admin.sys가 ?�스?�맵 ?�성?�라 명시 owner 권한??보유.
+// waitFor(?�재 로그???��???AuthGate 비동�?로드??최초 ?�더???�직 null ??isMe ?�정???�늦�?갱신??.
 const meBadge = aside.locator('[data-id="member-me-badge"]');
 await meBadge.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 check("me badge visible", await meBadge.isVisible());
 
-// ② en 모드 — 이름줄 영문(협업자 enName, 홍길동 미노출) → 클릭 펼침 → alt 필 "홍길동"
+// ??en 모드 ???�름�??�문(?�업??enName, ?�길??미노�? ???�릭 ?�침 ??alt ??"?�길??
 const rowEn = aside.locator('[role="button"]', { hasText: setup.enName });
 await rowEn.waitFor({ timeout: 10000 });
 const nameLineEn = (await rowEn.locator("span.truncate").first().innerText()).trim();
-check("en: name line shows english name (no 홍길동)", nameLineEn === setup.enName, nameLineEn);
+check("en: name line shows english name (no ?�길??", nameLineEn === setup.enName, nameLineEn);
 await rowEn.click();
 await page.waitForTimeout(400);
 const altEn = (await rowEn.locator('[data-id="member-alt-name"]').innerText()).trim();
-check("en: expanded alt-name field shows 홍길동", altEn === "홍길동", altEn);
+check("en: expanded alt-name field shows ?�길??, altEn === "?�길??, altEn);
 
-// ③ ko 모드로 재로드 — 이름줄 "홍길동" → 클릭 펼침 → alt 필에 영문 이름
+// ??ko 모드�??�로?????�름�?"?�길?? ???�릭 ?�침 ??alt ?�에 ?�문 ?�름
 await page.evaluate(() => window.localStorage.setItem("bpm.lang", "ko"));
 await page.reload({ waitUntil: "domcontentloaded" });
 await page
   .locator('[data-id="map-card"]', { hasText: setup.mapName })
   .click({ position: { x: 8, y: 8 } });
 await aside.locator('[role="button"]').first().waitFor({ timeout: 10000 });
-const rowKo = aside.locator('[role="button"]', { hasText: "홍길동" });
+const rowKo = aside.locator('[role="button"]', { hasText: "?�길?? });
 await rowKo.waitFor({ timeout: 10000 });
 const nameLineKo = (await rowKo.locator("span.truncate").first().innerText()).trim();
-check("ko: name line shows 홍길동", nameLineKo === "홍길동", nameLineKo);
+check("ko: name line shows ?�길??, nameLineKo === "?�길??, nameLineKo);
 await rowKo.click();
 await page.waitForTimeout(400);
 const altKo = (await rowKo.locator('[data-id="member-alt-name"]').innerText()).trim();
 check("ko: expanded alt-name field shows english name", altKo === setup.enName, altKo);
 
-// ④ Me 뱃지 재확인(ko 모드, 언어 무관 아이콘)
+// ??Me 뱃�? ?�확??ko 모드, ?�어 무�? ?�이�?
 const meBadgeKo = aside.locator('[data-id="member-me-badge"]');
 await meBadgeKo.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 check("me badge still visible (ko)", await meBadgeKo.isVisible());
 
-// ⑤ 그룹 카드 — 시드된 그룹이 있으면 이름이 해석되어 보임을 확인(숫자 id 그대로 아님). 없으면 SKIP 명시.
+// ??그룹 카드 ???�드??그룹???�으�??�름???�석?�어 보임???�인(?�자 id 그�?�??�님). ?�으�?SKIP 명시.
 if (setup.group) {
   const asideText = await aside.innerText();
   check(
@@ -141,7 +137,7 @@ if (setup.group) {
 
 check("no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
 
-// 정리 — setup에서 만든 테스트맵 삭제(소프트삭제→휴지통). 실패도 정직하게 exit 코드에 반영.
+// ?�리 ??setup?�서 만든 ?�스?�맵 ??��(?�프?�삭?�→?��???. ?�패???�직?�게 exit 코드??반영.
 const cleanup = await page.evaluate(async (mapId) => {
   const res = await fetch(`/api/maps/${mapId}`, {
     method: "DELETE",
