@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-10-25 — Security patch: Next.js 16.4.3 · React 19.3.1 · Node 20.20.2-alpine (main)
+- 2026년 10월 긴급 보안 권고(CVE-2026-96889, GHSA-673q-mjm6-r5xr, GHSA-p3m5-59mp-jv5r, Node.js CVE-2026-111497) 대응으로 프론트엔드 `next` 16.4.3, `react`/`react-dom` 19.3.1, Dockerfile 베이스 이미지 `node:20.20.2-alpine` 상향
+
 ## 2026-07-11 — Remove Keycloak · frontend port 3000
 - OIDC/Keycloak 코드·의존성·env 전부 제거. 로그인 피커 + `X-Dev-User` only
 - frontend dev/start 포트 **3000** (기존). Docker/nginx 정렬. README·deploy·CLAUDE 갱신

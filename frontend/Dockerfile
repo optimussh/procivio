@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
-# node:20-alpine 고정 — 서버(사내 71번)에서 node:22 이미지 풀 실패 → 풀 가능한 LTS로 다운
-FROM node:20-alpine AS deps
+# node:20-alpine 고정 — 서버(사내 71번)에서 node:22 이미지 풀 실패 → 풀 가능한 LTS 보안 패치 버전(20.20.2) 고정
+FROM node:20.20.2-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
-FROM node:20-alpine AS builder
+FROM node:20.20.2-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -14,7 +14,7 @@ COPY . .
 RUN npm run build
 
 # standalone 산출물만 담은 런타임 이미지 (next.config.ts output: "standalone")
-FROM node:20-alpine AS runner
+FROM node:20.20.2-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
